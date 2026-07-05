@@ -15,7 +15,23 @@
 - `assets/scripts/platform`：平台能力抽象，当前实现 `PlatformServiceWeb` 本地模拟版本。
 - `assets/scripts/cocos`：Cocos 入口组件骨架，用于连接场景节点、资源加载和核心玩法。
 - `assets/resources/levels`：关卡 JSON 配置。
-- `assets/scenes/GameScene.scene`：场景占位说明。首次打开 Cocos Creator 后，应创建正式场景并绑定 `GameAppComponent`。
+- `assets/scenes/GameScene.scene`：粗略可玩场景，Canvas 上绑定 `GameAppComponent`，运行时动态生成 HUD、遮挡层、菌子和通关提示。
+
+## 粗略可玩版本
+
+当前版本已经具备一局最小闭环：
+- 打开 `GameScene.scene` 后进入测试关卡 `level-001`。
+- 点击草枝/茅草堆，逐层移除遮挡。
+- 遮挡移除完后显示两个菌子。
+- 点击菌子更新拾取进度。
+- 拾取达到目标数量后显示通关提示。
+
+## Cocos 预览
+
+1. 使用 Cocos Creator 3.8.8 打开 `F:\AIworkspace\AIGameBundle\PickMushRooms`。
+2. 打开 `assets/scenes/GameScene.scene`。
+3. 点击编辑器预览按钮，选择 Web 预览。
+4. 在预览窗口点击场景中央的遮挡层，再点击露出的菌子。
 
 ## 本地验证
 
@@ -28,6 +44,7 @@ node --test tests/*.test.ts
 - 拆完堆叠层后菌子可见并可拾取。
 - 拾取目标数量后关卡完成。
 - Web 平台服务返回本地模拟结果。
+- 关卡视图模型能反映粗略可玩场景状态。
 
 ## 项目卫生
 

@@ -14,6 +14,8 @@
 - 核心玩法逻辑放在 `assets/scripts/core`，保持不依赖 Cocos，便于单元测试。
 - 平台能力必须通过 `PlatformService` 抽象访问，不在玩法逻辑中直接调用微信、抖音、Android、iOS 或 HarmonyOS API。
 - 本地核心测试命令：`node --test tests/*.test.ts`。
+- 当前粗略版本入口场景：`assets/scenes/GameScene.scene`。
+- Cocos 入口组件：`assets/scripts/cocos/GameAppComponent.ts`，当前运行时会动态生成占位 UI 和可点击玩法节点。
 
 项目卫生约定：
 - 保留并提交 `assets/`、资源 `.meta`、`settings/`、源码、测试和项目配置文件。
