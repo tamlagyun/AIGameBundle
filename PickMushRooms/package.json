@@ -1,0 +1,14 @@
+{
+  "name": "pick-mushrooms",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "creator": {
+    "version": "3.8.8"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.ts"
+  },
+  "devDependencies": {},
+  "uuid": "80eb5967-62dd-4df4-9c9d-d66ea010218e"
+}

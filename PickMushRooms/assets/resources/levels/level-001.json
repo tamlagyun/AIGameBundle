@@ -1,0 +1,39 @@
+{
+  "levelId": "level-001",
+  "targetCount": 2,
+  "piles": [
+    {
+      "id": "pile-1",
+      "x": 0,
+      "y": 0,
+      "layers": [
+        {
+          "id": "branch-layer-1",
+          "kind": "branch",
+          "label": "Tree Branches"
+        },
+        {
+          "id": "thatch-layer-1",
+          "kind": "thatch",
+          "label": "Dry Thatch"
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "id": "mushroom-1",
+      "pileId": "pile-1",
+      "x": -48,
+      "y": -12,
+      "kind": "mushroom"
+    },
+    {
+      "id": "mushroom-2",
+      "pileId": "pile-1",
+      "x": 52,
+      "y": -16,
+      "kind": "mushroom"
+    }
+  ]
+}

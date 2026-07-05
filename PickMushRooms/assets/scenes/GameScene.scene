@@ -1,0 +1,5 @@
+{
+  "name": "GameScene",
+  "description": "Cocos Creator scene placeholder. Open the project in Cocos Creator 3.8 LTS and bind GameAppComponent to the root node with a playfield node, HUD label, and completed panel.",
+  "entryComponent": "assets/scripts/cocos/GameAppComponent.ts"
+}
