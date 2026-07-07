@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>上山捡菌子 - Web Preview</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Microsoft YaHei", Arial, sans-serif;
+        background: #243626;
+        color: #f7f1df;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #1d2a22;
+      }
+
+      #app {
+        width: min(100vw, 960px);
+        min-height: min(100vh, 640px);
+        position: relative;
+        overflow: hidden;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(0, 0, 0, 0.12)),
+          url("../assets/resources/art/placeholder/forest-background.png") center / cover no-repeat;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+      }
+
+      .hud {
+        position: absolute;
+        inset: 18px 18px auto 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        pointer-events: none;
+      }
+
+      .hud-pill {
+        min-width: 128px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        background: rgba(28, 40, 31, 0.86);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        font-weight: 700;
+        text-align: center;
+      }
+
+      .hint {
+        max-width: 360px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        background: rgba(28, 40, 31, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        font-size: 14px;
+      }
+
+      .playfield {
+        position: absolute;
+        inset: 0;
+      }
+
+      .pile,
+      .mushroom {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        border: 0;
+        background: transparent;
+        padding: 0;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+
+      .pile {
+        width: 170px;
+        height: 116px;
+      }
+
+      .pile img,
+      .mushroom img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        pointer-events: none;
+        filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.34));
+      }
+
+      .pile-count {
+        position: absolute;
+        right: 18px;
+        top: 10px;
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: rgba(49, 34, 23, 0.9);
+        color: #fff6d0;
+        font-weight: 800;
+      }
+
+      .mushroom {
+        width: 78px;
+        height: 78px;
+        opacity: 0;
+        pointer-events: none;
+        transition: transform 140ms ease, opacity 140ms ease;
+      }
+
+      .mushroom.visible {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .mushroom.picked {
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(-50%, -50%) scale(1.22);
+      }
+
+      .feedback {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        color: #fff2a8;
+        font-weight: 900;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+        animation: float-up 320ms ease forwards;
+        pointer-events: none;
+      }
+
+      .complete {
+        position: absolute;
+        inset: 0;
+        display: none;
+        place-items: center;
+        background: rgba(19, 28, 22, 0.42);
+      }
+
+      .complete.visible {
+        display: grid;
+      }
+
+      .complete-panel {
+        width: min(88vw, 360px);
+        padding: 24px;
+        border-radius: 8px;
+        background: rgba(252, 248, 229, 0.94);
+        color: #243326;
+        text-align: center;
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+      }
+
+      .complete-panel h1 {
+        margin: 0 0 14px;
+        font-size: 28px;
+      }
+
+      .complete-panel button {
+        min-width: 120px;
+        min-height: 42px;
+        border: 0;
+        border-radius: 8px;
+        background: #3f7043;
+        color: #fff;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      @keyframes float-up {
+        from {
+          opacity: 1;
+          transform: translate(-50%, -50%);
+        }
+
+        to {
+          opacity: 0;
+          transform: translate(-50%, calc(-50% - 42px));
+        }
+      }
+
+      @media (max-width: 640px) {
+        #app {
+          min-height: 100vh;
+          border: 0;
+        }
+
+        .hud {
+          inset: 12px 12px auto 12px;
+          align-items: flex-start;
+        }
+
+        .hint {
+          max-width: 210px;
+          font-size: 13px;
+        }
+
+        .pile {
+          width: 132px;
+          height: 92px;
+        }
+
+        .mushroom {
+          width: 60px;
+          height: 60px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app" aria-label="上山捡菌子粗略试玩">
+      <section class="hud" aria-label="游戏状态">
+        <div class="hud-pill" data-testid="progress">0/4</div>
+        <div class="hint">点开草堆和树枝，露出菌子后再拾取。</div>
+      </section>
+      <section class="playfield" data-testid="playfield"></section>
+      <section class="complete" data-testid="complete-panel" aria-live="polite">
+        <div class="complete-panel">
+          <h1>过关</h1>
+          <button type="button" data-testid="replay-button">重玩</button>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./preview.js"></script>
+  </body>
+</html>

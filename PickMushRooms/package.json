@@ -7,7 +7,9 @@
     "version": "3.8.8"
   },
   "scripts": {
-    "test": "node --test tests/*.test.ts"
+    "test": "node --test tests/*.test.ts",
+    "check": "node scripts/check-project.mjs",
+    "preview:web": "node scripts/serve-web-preview.mjs"
   },
   "devDependencies": {},
   "uuid": "80eb5967-62dd-4df4-9c9d-d66ea010218e"

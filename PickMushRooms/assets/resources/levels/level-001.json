@@ -1,19 +1,53 @@
 {
   "levelId": "level-001",
-  "targetCount": 2,
+  "targetCount": 4,
   "piles": [
     {
-      "id": "pile-1",
-      "x": 0,
-      "y": 0,
+      "id": "pile-left",
+      "x": -260,
+      "y": -70,
       "layers": [
         {
-          "id": "branch-layer-1",
+          "id": "left-thatch-layer-1",
+          "kind": "thatch",
+          "label": "Dry Thatch"
+        }
+      ]
+    },
+    {
+      "id": "pile-center",
+      "x": 0,
+      "y": -20,
+      "layers": [
+        {
+          "id": "center-branch-layer-1",
           "kind": "branch",
           "label": "Tree Branches"
         },
         {
-          "id": "thatch-layer-1",
+          "id": "center-thatch-layer-1",
+          "kind": "thatch",
+          "label": "Dry Thatch"
+        }
+      ]
+    },
+    {
+      "id": "pile-right",
+      "x": 255,
+      "y": -85,
+      "layers": [
+        {
+          "id": "right-branch-layer-1",
+          "kind": "branch",
+          "label": "Tree Branches"
+        },
+        {
+          "id": "right-branch-layer-2",
+          "kind": "branch",
+          "label": "Tree Branches"
+        },
+        {
+          "id": "right-thatch-layer-1",
           "kind": "thatch",
           "label": "Dry Thatch"
         }
@@ -22,17 +56,38 @@
   ],
   "items": [
     {
-      "id": "mushroom-1",
-      "pileId": "pile-1",
-      "x": -48,
-      "y": -12,
+      "id": "mushroom-left-small",
+      "pileId": "pile-left",
+      "x": -286,
+      "y": -98,
       "kind": "mushroom"
     },
     {
-      "id": "mushroom-2",
-      "pileId": "pile-1",
+      "id": "mushroom-center-red",
+      "pileId": "pile-center",
+      "x": -48,
+      "y": -48,
+      "kind": "mushroom"
+    },
+    {
+      "id": "mushroom-center-brown",
+      "pileId": "pile-center",
       "x": 52,
-      "y": -16,
+      "y": -52,
+      "kind": "mushroom"
+    },
+    {
+      "id": "mushroom-right-gold",
+      "pileId": "pile-right",
+      "x": 226,
+      "y": -114,
+      "kind": "mushroom"
+    },
+    {
+      "id": "mushroom-right-hidden",
+      "pileId": "pile-right",
+      "x": 292,
+      "y": -108,
       "kind": "mushroom"
     }
   ]
