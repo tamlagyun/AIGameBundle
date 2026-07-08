@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "kind": "placeholder-animation-states",
+  "purpose": "第 11 步基础动画状态占位清单，后续由 Cocos AnimationClip 和正式美术资源替换。",
+  "rule": "动画资源只描述表现状态，不承载核心玩法规则。",
+  "entities": {
+    "hero": {
+      "prefab": "PlayerRoot",
+      "states": [
+        { "name": "idle", "label": "待机", "frameRate": 8, "loop": true, "placeholderFrames": ["hero-idle-01", "hero-idle-02"] },
+        { "name": "run", "label": "奔跑", "frameRate": 12, "loop": true, "placeholderFrames": ["hero-run-01", "hero-run-02", "hero-run-03"] },
+        { "name": "jump", "label": "跳跃", "frameRate": 10, "loop": false, "placeholderFrames": ["hero-jump-01"] },
+        { "name": "shoot", "label": "射击", "frameRate": 14, "loop": false, "placeholderFrames": ["hero-shoot-01", "hero-shoot-02"] },
+        { "name": "hurt", "label": "受击", "frameRate": 10, "loop": false, "placeholderFrames": ["hero-hurt-01"] }
+      ]
+    },
+    "forestSlime": {
+      "prefab": "EnemyForestSlime",
+      "states": [
+        { "name": "idle", "label": "待机", "frameRate": 6, "loop": true, "placeholderFrames": ["slime-idle-01", "slime-idle-02"] },
+        { "name": "patrol", "label": "巡逻", "frameRate": 8, "loop": true, "placeholderFrames": ["slime-patrol-01", "slime-patrol-02"] },
+        { "name": "hit", "label": "受击", "frameRate": 10, "loop": false, "placeholderFrames": ["slime-hit-01"] },
+        { "name": "defeated", "label": "击败", "frameRate": 10, "loop": false, "placeholderFrames": ["slime-defeated-01", "slime-defeated-02"] }
+      ]
+    },
+    "playerBullet": {
+      "prefab": "PlayerBullet",
+      "states": [
+        { "name": "fly", "label": "飞行", "frameRate": 12, "loop": true, "placeholderFrames": ["bullet-fly-01", "bullet-fly-02"] },
+        { "name": "impact", "label": "命中", "frameRate": 12, "loop": false, "placeholderFrames": ["bullet-impact-01"] }
+      ]
+    },
+    "coinPickup": {
+      "prefab": "CoinPickup",
+      "states": [
+        { "name": "spin", "label": "旋转", "frameRate": 10, "loop": true, "placeholderFrames": ["coin-spin-01", "coin-spin-02"] },
+        { "name": "collected", "label": "收集", "frameRate": 12, "loop": false, "placeholderFrames": ["coin-collected-01"] }
+      ]
+    },
+    "weaponBoostPickup": {
+      "prefab": "WeaponBoostPickup",
+      "states": [
+        { "name": "pulse", "label": "脉冲", "frameRate": 8, "loop": true, "placeholderFrames": ["boost-pulse-01", "boost-pulse-02"] },
+        { "name": "collected", "label": "收集", "frameRate": 12, "loop": false, "placeholderFrames": ["boost-collected-01"] }
+      ]
+    },
+    "hud": {
+      "prefab": "HudRoot",
+      "states": [
+        { "name": "steady", "label": "常驻", "frameRate": 1, "loop": true, "placeholderFrames": ["hud-steady-01"] },
+        { "name": "pulse", "label": "提示", "frameRate": 8, "loop": false, "placeholderFrames": ["hud-pulse-01", "hud-pulse-02"] }
+      ]
+    }
+  }
+}

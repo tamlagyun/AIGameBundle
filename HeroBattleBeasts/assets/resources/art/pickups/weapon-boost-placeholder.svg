@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" data-role="cartoon-placeholder">
+  <title>武器强化卡通占位</title>
+  <rect width="44" height="44" rx="8" fill="#d8c7ff"/>
+  <path d="M22 5l5 12 12 1-9 8 3 12-11-6-11 6 3-12-9-8 12-1z" fill="#7d5fff"/>
+  <path d="M14 23h16" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M22 15v16" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+</svg>

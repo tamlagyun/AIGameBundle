@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" data-role="cartoon-placeholder">
+  <title>HUD 武器图标卡通占位</title>
+  <rect width="32" height="32" rx="6" fill="#dff7ff"/>
+  <path d="M6 17h14" stroke="#2563eb" stroke-width="5" stroke-linecap="round"/>
+  <path d="M18 10l9 7-9 7z" fill="#38bdf8"/>
+  <circle cx="9" cy="23" r="3" fill="#2563eb"/>
+</svg>

@@ -1,0 +1,9 @@
+{
+  "id": "forest-slime",
+  "displayName": "圆滚史莱姆",
+  "maxHealth": 2,
+  "contactDamage": 1,
+  "moveSpeed": 90,
+  "patrolDistance": 160,
+  "score": 100
+}

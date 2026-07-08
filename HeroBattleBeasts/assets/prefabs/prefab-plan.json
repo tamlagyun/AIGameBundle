@@ -1,0 +1,36 @@
+{
+  "purpose": "第一版 Cocos 预制体命名计划，后续由真实 .prefab 资源替换。",
+  "rule": "预制体只承载表现和节点结构，不承载核心玩法规则。",
+  "requiredPrefabs": [
+    {
+      "name": "PlayerRoot",
+      "futurePath": "assets/prefabs/PlayerRoot.prefab",
+      "bindsTo": "RuntimeViewModel.player"
+    },
+    {
+      "name": "EnemyForestSlime",
+      "futurePath": "assets/prefabs/EnemyForestSlime.prefab",
+      "bindsTo": "RuntimeViewModel.enemies"
+    },
+    {
+      "name": "PlayerBullet",
+      "futurePath": "assets/prefabs/PlayerBullet.prefab",
+      "bindsTo": "RuntimeViewModel.bullets"
+    },
+    {
+      "name": "CoinPickup",
+      "futurePath": "assets/prefabs/CoinPickup.prefab",
+      "bindsTo": "RuntimeViewModel.pickups[type=coin]"
+    },
+    {
+      "name": "WeaponBoostPickup",
+      "futurePath": "assets/prefabs/WeaponBoostPickup.prefab",
+      "bindsTo": "RuntimeViewModel.pickups[type=weaponBoost]"
+    },
+    {
+      "name": "HudRoot",
+      "futurePath": "assets/prefabs/HudRoot.prefab",
+      "bindsTo": "RuntimeViewModel.hud"
+    }
+  ]
+}

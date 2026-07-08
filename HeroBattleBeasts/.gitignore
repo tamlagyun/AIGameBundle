@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+.creator/
+temp/
+library/
+local/
+*.log
+*.tsbuildinfo

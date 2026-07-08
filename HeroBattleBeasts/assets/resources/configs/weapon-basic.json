@@ -1,0 +1,9 @@
+{
+  "id": "starter-blaster",
+  "displayName": "星光玩具枪",
+  "damage": 1,
+  "bulletSpeed": 720,
+  "fireCooldownSeconds": 0.22,
+  "boostedFireCooldownSeconds": 0.11,
+  "boostDurationSeconds": 8
+}
