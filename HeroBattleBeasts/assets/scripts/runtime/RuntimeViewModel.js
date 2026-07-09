@@ -11,6 +11,8 @@ export function createRuntimeViewModel(state) {
     },
     player: {
       id: state.player.id,
+      health: state.player.health,
+      maxHealth: state.player.maxHealth,
       position: { ...state.player.position },
       velocity: { ...state.player.velocity },
       facing: state.player.facing,
