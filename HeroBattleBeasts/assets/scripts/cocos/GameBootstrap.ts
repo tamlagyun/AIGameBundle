@@ -19,13 +19,63 @@ import {
 import { GameRuntime } from '../runtime/GameRuntime';
 import { normalizeKeyboardInput, cocosKeyCodeToWebCode, KEY_BINDINGS } from '../runtime/InputAdapter';
 import type { RuntimeViewModel } from '../runtime/RuntimeViewModel';
+import {
+  VIEW_WIDTH,
+  VIEW_HEIGHT,
+  TILE_STANDING_RATIO,
+  SPRITE_ASSETS,
+  worldToScreenX,
+  worldToScreenY,
+  calcTileCocosY,
+} from '../renderer/RenderConfig';
 
 const BOOTSTRAP_FLAG = '__heroBattleBeastsCocosBootstrapStarted';
-const VIEW_WIDTH = 1280;
-const VIEW_HEIGHT = 720;
 
 // 模块级玩家精灵节点引用
 let sPlayerSpriteNode: Node | null = null;
+
+// AI精灵图缓存：资源路径 → SpriteFrame
+const sSpriteFrameCache = new Map<string, SpriteFrame>();
+// 动态精灵节点池：用于敌人/道具/子弹的复用
+let sSpritePoolParent: Node | null = null;
+const sEnemyNodes: Node[] = [];       // 闲置池
+const sPickupNodes: Node[] = [];      // 闲置池
+const sBulletNodes: Node[] = [];      // 闲置池
+// 当前帧活跃节点（用于回收上一帧残留）
+const sActiveEnemyNodes: Node[] = [];
+const sActivePickupNodes: Node[] = [];
+const sActiveBulletNodes: Node[] = [];
+let sExitNode: Node | null = null;
+// 冒险岛风格地图
+let sBackgroundNode: Node | null = null;
+let sMapTileParent: Node | null = null;
+const sGroundTileNodes: Node[] = [];
+const sPlatformTileNodes: Node[] = [];
+const sActiveGroundTileNodes: Node[] = [];
+const sActivePlatformTileNodes: Node[] = [];
+
+// 资源名 → SpriteFrame 的快速查找
+function getCachedSpriteFrame(resPath: string): SpriteFrame | null {
+  return sSpriteFrameCache.get(resPath) ?? null;
+}
+
+// 从池中获取或创建精灵节点
+function ensureSpriteNode(parent: Node, nameBase: string, pool: Node[]): Node {
+  let node = pool.pop();
+  if (!node) {
+    node = new Node(nameBase);
+    parent.addChild(node);
+    node.layer = parent.layer;
+  }
+  node.active = true;
+  return node;
+}
+
+// 归还精灵节点到池
+function releaseSpriteNode(node: Node, pool: Node[]): void {
+  node.active = false;
+  pool.push(node);
+}
 
 const playerConfig = {
   id: 'hero-ranger',
@@ -139,34 +189,80 @@ export function startCocosRuntimePreview(): void {
     }
 
     const canvas = ensureCanvasRoot(scene);
+
+    // ═══ 底层：背景图 + 地图瓦片（必须在游戏对象之前创建，确保不遮挡） ═══
+    const bgNode = ensureNode(canvas, 'BackgroundSprite');
+    sBackgroundNode = bgNode;
+    bgNode.setPosition(0, 0);
+    const bgTransform = bgNode.getComponent(UITransform) ?? bgNode.addComponent(UITransform);
+    bgTransform.setContentSize(1280, 720);
+    const bgSprite = bgNode.getComponent(Sprite) ?? bgNode.addComponent(Sprite);
+    bgSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+
+    const mapTileParent = ensureNode(canvas, 'MapTilePool');
+    sMapTileParent = mapTileParent;
+    // ═══ 底层结束 ═══
+
     const graphicsNode = ensureRenderNode(canvas, 'HeroBattleBeastsRuntimeGraphics');
     const graphics = graphicsNode.getComponent(Graphics) ?? graphicsNode.addComponent(Graphics);
+
+    // 精灵节点池父节点
+    const poolParent = ensureNode(canvas, 'SpritePool');
+    sSpritePoolParent = poolParent;
 
     const hudNode = ensureNode(canvas, 'HeroBattleBeastsRuntimeHud');
     const statusLabel = ensureLabel(hudNode, 'StatusLabel', 24, -626, 310);
     const helpLabel = ensureLabel(hudNode, 'HelpLabel', 18, -626, -320);
 
-    // AI生成的玩家精灵节点（放在HUD之后创建，保证渲染在最上层）
+    // 结果面板（初始隐藏，游戏结束时显示）
+    const resultRoot = ensureNode(canvas, 'ResultOverlay');
+    resultRoot.active = false;
+    const resultTitle = ensureCenteredLabel(resultRoot, 'ResultTitle', 38, 0, 90);
+    const resultScore = ensureCenteredLabel(resultRoot, 'ResultScore', 18, 0, 45);
+    const resultCoins = ensureCenteredLabel(resultRoot, 'ResultCoins', 18, 0, 20);
+    const resultDefeats = ensureCenteredLabel(resultRoot, 'ResultDefeats', 18, 0, -5);
+    const resultTime = ensureCenteredLabel(resultRoot, 'ResultTime', 18, 0, -30);
+    const resultHint = ensureCenteredLabel(resultRoot, 'ResultHint', 16, 0, -65);
+    resultHint.color = new Color(255, 213, 76, 255);
+
+    // AI生成的玩家精灵节点
     const playerSpriteNode = ensureNode(canvas, 'PlayerSprite');
     sPlayerSpriteNode = playerSpriteNode;
     playerSpriteNode.setPosition(0, 0);
     const playerTransform = playerSpriteNode.getComponent(UITransform) ?? playerSpriteNode.addComponent(UITransform);
-    // 角色视觉尺寸：宽56高80（物理碰撞盒32x48，视觉略大于碰撞盒）
-    playerTransform.setContentSize(56, 80);
+    playerTransform.setContentSize(64, 64);  // 正方形图片保持比例
+    playerTransform.setAnchorPoint(0.5, 0);  // 底部中心锚点：脚底对齐物理位置
     const playerSprite = playerSpriteNode.getComponent(Sprite) ?? playerSpriteNode.addComponent(Sprite);
-    // CUSTOM 模式：用 UITransform 控制显示尺寸，而非纹理原始尺寸
     playerSprite.sizeMode = Sprite.SizeMode.CUSTOM;
 
-    // 加载AI图片（直接加载ImageAsset后手动构建SpriteFrame，绕过.meta子资源问题）
-    try {
-      console.log('[HeroBattleBeasts] Loading player image from: art/characters/player_hero');
-      resources.load('art/characters/player_hero', ImageAsset, (err: Error | null, imageAsset: ImageAsset) => {
-        if (err) {
-          console.warn('[HeroBattleBeasts] Failed to load player image:', err.message || err);
-          return;
-        }
-        if (!imageAsset) {
-          console.warn('[HeroBattleBeasts] Loaded ImageAsset is null');
+    // 出口精灵节点
+    sExitNode = ensureNode(canvas, 'ExitSprite');
+    sExitNode.setPosition(0, 0);
+    const exitTransform = sExitNode.getComponent(UITransform) ?? sExitNode.addComponent(UITransform);
+    exitTransform.setContentSize(64, 64);
+    const exitSprite = sExitNode.getComponent(Sprite) ?? sExitNode.addComponent(Sprite);
+    exitSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+
+    // 强制设定节点层级顺序，防止热重载/二次运行时旧顺序残留
+    // Cocos 按 siblingIndex 递增渲染，数字大的在上面
+    if (sBackgroundNode) sBackgroundNode.setSiblingIndex(0);   // 最底层
+    if (sMapTileParent) sMapTileParent.setSiblingIndex(1);     // 地图瓦片
+    graphicsNode.setSiblingIndex(2);                            // Graphics 后备绘制
+    if (sSpritePoolParent) sSpritePoolParent.setSiblingIndex(3);// 敌人/子弹/金币
+    if (sPlayerSpriteNode) sPlayerSpriteNode.setSiblingIndex(4);// 玩家
+    if (sExitNode) sExitNode.setSiblingIndex(5);               // 出口
+    hudNode.setSiblingIndex(6);                                 // HUD
+    resultRoot.setSiblingIndex(7);                              // 结果面板（最顶层）
+
+    // 批量加载所有AI精灵图
+    let loadedCount = 0;
+    const totalAssets = SPRITE_ASSETS.length;
+    console.log(`[HeroBattleBeasts] Loading ${totalAssets} sprite assets...`);
+    for (const asset of SPRITE_ASSETS) {
+      resources.load(asset.path, ImageAsset, (err: Error | null, imageAsset: ImageAsset) => {
+        loadedCount++;
+        if (err || !imageAsset) {
+          console.warn(`[HeroBattleBeasts] Failed: ${asset.path}`, err?.message || '');
           return;
         }
         try {
@@ -174,14 +270,21 @@ export function startCocosRuntimePreview(): void {
           texture.image = imageAsset;
           const spriteFrame = new SpriteFrame();
           spriteFrame.texture = texture;
-          playerSprite.spriteFrame = spriteFrame;
-          console.info('[HeroBattleBeasts] AI player sprite created, texture size:', texture.width, 'x', texture.height);
+          sSpriteFrameCache.set(asset.path, spriteFrame);
+
+          // 根据路径自动绑定到对应节点
+          if (asset.path.includes('player_hero')) {
+            playerSprite.spriteFrame = spriteFrame;
+          } else if (asset.path.includes('exit-sign')) {
+            exitSprite.spriteFrame = spriteFrame;
+          } else if (asset.path.includes('background')) {
+            if (bgSprite) bgSprite.spriteFrame = spriteFrame;
+          }
+          console.log(`[HeroBattleBeasts] Loaded: ${asset.path} (${texture.width}x${texture.height})`);
         } catch (e2) {
-          console.warn('[HeroBattleBeasts] SpriteFrame creation failed:', e2);
+          console.warn(`[HeroBattleBeasts] Create failed: ${asset.path}`, e2);
         }
       });
-    } catch (e) {
-      console.warn('[HeroBattleBeasts] resources.load exception:', e);
     }
 
     const runtime = new GameRuntime({
@@ -205,9 +308,11 @@ export function startCocosRuntimePreview(): void {
 
       if (inputCommand.restartPressed) {
         activeKeys.delete('KeyR');
+        runtime.restart();
       }
 
-      renderGame(graphics, viewModel);
+      renderGame(graphics, viewModel,
+        resultRoot, resultTitle, resultScore, resultCoins, resultDefeats, resultTime, resultHint);
       renderHud(statusLabel, helpLabel, viewModel);
     };
 
@@ -265,6 +370,20 @@ function ensureLabel(parent: Node, name: string, fontSize: number, x: number, y:
   return label;
 }
 
+// 居中 Label（用于结果面板）
+function ensureCenteredLabel(parent: Node, name: string, fontSize: number, x: number, y: number): Label {
+  const node = ensureNode(parent, name);
+  node.setPosition(x, y);
+  const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
+  transform.setContentSize(440, fontSize + 10);
+  const label = node.getComponent(Label) ?? node.addComponent(Label);
+  label.fontSize = fontSize;
+  label.lineHeight = fontSize + 6;
+  label.horizontalAlign = HorizontalTextAlignment.CENTER;
+  label.color = new Color(207, 216, 220, 255);
+  return label;
+}
+
 function bindKeyboard(activeKeys: Set<string>, runtime: GameRuntime): void {
   input.on(Input.EventType.KEY_DOWN, (event) => {
     const webCode = cocosKeyCodeToWebCode(event.keyCode);
@@ -292,109 +411,219 @@ function renderHud(statusLabel: Label, helpLabel: Label, viewModel: RuntimeViewM
   helpLabel.string = 'Move/Aim: WASD or Arrow  Jump: W/Space  Shoot: J/Z  Restart: R';
 }
 
-function renderGame(graphics: Graphics, viewModel: RuntimeViewModel): void {
+function renderGame(
+  graphics: Graphics,
+  viewModel: RuntimeViewModel,
+  resultRoot: Node,
+  resultTitle: Label,
+  resultScore: Label,
+  resultCoins: Label,
+  resultDefeats: Label,
+  resultTime: Label,
+  resultHint: Label
+): void {
   const cameraX = clamp(viewModel.player.position.x - 360, 0, levelConfig.size.width - VIEW_WIDTH);
 
   graphics.clear();
-  drawBackground(graphics);
-  drawPlatforms(graphics, cameraX);
-  drawExit(graphics, cameraX, viewModel);
-  drawPickups(graphics, cameraX, viewModel);
-  drawEnemies(graphics, cameraX, viewModel);
-  drawBullets(graphics, cameraX, viewModel);
+  updateBackgroundSprite();
+  updatePlatformSprites(cameraX);
+  updateExitSprite(cameraX, viewModel);
+  updatePickupSprites(cameraX, viewModel);
+  updateEnemySprites(cameraX, viewModel);
+  updateBulletSprites(cameraX, viewModel);
   updatePlayerSprite(graphics, cameraX, viewModel);
-  drawResultOverlay(graphics, viewModel);
+  drawResultOverlay(graphics, viewModel, resultRoot, resultTitle, resultScore, resultCoins, resultDefeats, resultTime, resultHint);
 }
 
-function worldToScreenX(x: number, cameraX: number): number {
-  return x - cameraX - VIEW_WIDTH / 2;
+function updateBackgroundSprite(): void {
+  // 背景精灵始终显示，由资源加载时自动绑定
+  if (sBackgroundNode) {
+    sBackgroundNode.active = true;
+  }
 }
 
-function worldToScreenY(y: number): number {
-  return VIEW_HEIGHT / 2 - y;
-}
+function updatePlatformSprites(cameraX: number): void {
+  if (!sMapTileParent) return;
 
-function drawBackground(graphics: Graphics): void {
-  graphics.fillColor = new Color(202, 232, 255, 255);
-  graphics.rect(-VIEW_WIDTH / 2, -VIEW_HEIGHT / 2, VIEW_WIDTH, VIEW_HEIGHT);
-  graphics.fill();
+  // 回收上一帧所有活跃瓦片节点
+  for (const node of sActiveGroundTileNodes.splice(0)) {
+    releaseTileNode(node, sGroundTileNodes);
+  }
+  for (const node of sActivePlatformTileNodes.splice(0)) {
+    releaseTileNode(node, sPlatformTileNodes);
+  }
 
-  graphics.fillColor = new Color(112, 185, 126, 255);
-  graphics.rect(-VIEW_WIDTH / 2, -VIEW_HEIGHT / 2, VIEW_WIDTH, 115);
-  graphics.fill();
+  const groundSf = getCachedSpriteFrame('art/map/ground_tile');
+  const platformSf = getCachedSpriteFrame('art/map/platform_tile');
 
-  graphics.fillColor = new Color(252, 214, 92, 255);
-  graphics.circle(470, 245, 42);
-  graphics.fill();
-}
-
-function drawPlatforms(graphics: Graphics, cameraX: number): void {
-  graphics.fillColor = new Color(88, 152, 91, 255);
   for (const platform of levelConfig.platforms) {
-    graphics.roundRect(
-      worldToScreenX(platform.x, cameraX),
-      worldToScreenY(platform.y),
-      platform.width,
-      platform.height,
-      14
-    );
-    graphics.fill();
+    const isGround = platform.id === 'ground';
+    const sf = isGround ? groundSf : platformSf;
+    if (!sf) continue;
+
+    const tileW = 256;
+    const tileH = isGround ? 80 : 36;
+    const tilePool = isGround ? sGroundTileNodes : sPlatformTileNodes;
+    const activePool = isGround ? sActiveGroundTileNodes : sActivePlatformTileNodes;
+
+    const numTiles = Math.ceil(platform.width / tileW);
+    // 根据路基站立比例计算瓦片屏幕位置（共享计算逻辑）
+    const standingRatio = TILE_STANDING_RATIO[platform.id] ?? 0.5;
+    const tileScreenY = calcTileCocosY(platform.y, standingRatio, tileH);
+
+    for (let i = 0; i < numTiles; i++) {
+      const tileCenterX = platform.x + i * tileW + tileW / 2;
+      const screenX = worldToScreenX(tileCenterX, cameraX);
+
+      const node = ensureTileNode(sMapTileParent, isGround ? 'GroundTile' : 'PlatformTile', tilePool);
+      const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
+      transform.setContentSize(tileW, tileH);
+      transform.setAnchorPoint(0.5, 0);  // 底部中心锚点：底部=图片下沿，图片向上延伸
+
+      const sprite = node.getComponent(Sprite) ?? node.addComponent(Sprite);
+      sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+      if (sprite.spriteFrame !== sf) {
+        sprite.spriteFrame = sf;
+      }
+
+      node.setPosition(screenX, tileScreenY);
+      activePool.push(node);
+    }
   }
 }
 
-function drawExit(graphics: Graphics, cameraX: number, viewModel: RuntimeViewModel): void {
-  graphics.fillColor = new Color(84, 122, 214, 210);
-  graphics.roundRect(
-    worldToScreenX(viewModel.exit.x, cameraX),
-    worldToScreenY(viewModel.exit.y),
-    viewModel.exit.width,
-    viewModel.exit.height,
-    18
-  );
-  graphics.fill();
+function ensureTileNode(parent: Node, nameBase: string, pool: Node[]): Node {
+  let node = pool.pop();
+  if (!node) {
+    node = new Node(nameBase);
+    parent.addChild(node);
+    node.layer = parent.layer;
+  }
+  node.active = true;
+  return node;
 }
 
-function drawPickups(graphics: Graphics, cameraX: number, viewModel: RuntimeViewModel): void {
+function releaseTileNode(node: Node, pool: Node[]): void {
+  node.active = false;
+  pool.push(node);
+}
+
+function updateExitSprite(cameraX: number, viewModel: RuntimeViewModel): void {
+  if (!sExitNode) return;
+  const sf = getCachedSpriteFrame('art/ui/exit-sign');
+  const sprite = sExitNode.getComponent(Sprite);
+  if (sf && sprite && sprite.spriteFrame !== sf) {
+    sprite.spriteFrame = sf;
+  }
+  // 出口传送门：中心锚点，位置在出口区域中心
+  const x = worldToScreenX(viewModel.exit.x + viewModel.exit.width / 2, cameraX);
+  const y = worldToScreenY(viewModel.exit.y + viewModel.exit.height / 2);
+  sExitNode.setPosition(x, y);
+}
+
+function updatePickupSprites(cameraX: number, viewModel: RuntimeViewModel): void {
+  if (!sSpritePoolParent) return;
+
+  // 回收上一帧所有活跃节点到闲置池
+  for (const node of sActivePickupNodes.splice(0)) {
+    releaseSpriteNode(node, sPickupNodes);
+  }
+
   for (const pickup of viewModel.pickups) {
-    if (pickup.collected) {
-      continue;
+    if (pickup.collected) continue;
+
+    const assetPath = pickup.type === 'weaponBoost'
+      ? 'art/pickups/weapon-boost'
+      : 'art/pickups/coin';
+    const size: [number, number] = [28, 28];
+
+    const node = ensureSpriteNode(sSpritePoolParent, `Pickup_${pickup.id}`, sPickupNodes);
+    const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
+    transform.setContentSize(size[0], size[1]);
+    transform.setAnchorPoint(0.5, 0);  // 底部中心：与玩家站在同一平台面
+    const sprite = node.getComponent(Sprite) ?? node.addComponent(Sprite);
+    sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+
+    const sf = getCachedSpriteFrame(assetPath);
+    if (sf && sprite.spriteFrame !== sf) {
+      sprite.spriteFrame = sf;
     }
-    graphics.fillColor = pickup.type === 'weaponBoost'
-      ? new Color(245, 102, 155, 255)
-      : new Color(255, 204, 61, 255);
-    graphics.circle(worldToScreenX(pickup.position.x, cameraX), worldToScreenY(pickup.position.y), 16);
-    graphics.fill();
+
+    // 拾取物位置 y 在关卡数据中比平台顶面高 50，补偿后底部对齐平台顶面
+    node.setPosition(
+      worldToScreenX(pickup.position.x, cameraX),
+      worldToScreenY(pickup.position.y + 50)
+    );
+    // 标记为当前帧活跃
+    sActivePickupNodes.push(node);
   }
 }
 
-function drawEnemies(graphics: Graphics, cameraX: number, viewModel: RuntimeViewModel): void {
+function updateEnemySprites(cameraX: number, viewModel: RuntimeViewModel): void {
+  if (!sSpritePoolParent) return;
+
+  // 回收上一帧所有活跃节点到闲置池
+  for (const node of sActiveEnemyNodes.splice(0)) {
+    releaseSpriteNode(node, sEnemyNodes);
+  }
+
   for (const enemy of viewModel.enemies) {
-    if (enemy.defeated) {
-      continue;
+    if (enemy.defeated) continue;
+
+    const node = ensureSpriteNode(sSpritePoolParent, `Enemy_${enemy.id}`, sEnemyNodes);
+    const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
+    transform.setContentSize(56, 56);
+    transform.setAnchorPoint(0.5, 0);  // 底部中心：与玩家站在同一平台面
+    const sprite = node.getComponent(Sprite) ?? node.addComponent(Sprite);
+    sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+
+    const sf = getCachedSpriteFrame('art/enemies/forest-slime');
+    if (sf && sprite.spriteFrame !== sf) {
+      sprite.spriteFrame = sf;
     }
-    graphics.fillColor = new Color(116, 214, 143, 255);
-    graphics.roundRect(
-      worldToScreenX(enemy.position.x, cameraX) - 24,
-      worldToScreenY(enemy.position.y) - 24,
-      48,
-      48,
-      22
+
+    // 敌人位置 y 在关卡数据中比平台顶面高 40，补偿后底部对齐平台顶面
+    node.setPosition(
+      worldToScreenX(enemy.position.x, cameraX),
+      worldToScreenY(enemy.position.y + 40)
     );
-    graphics.fill();
+    // 史莱姆面向玩家
+    node.setScale(enemy.position.x > viewModel.player.position.x ? -1 : 1, 1, 1);
+    // 标记为当前帧活跃
+    sActiveEnemyNodes.push(node);
   }
 }
 
-function drawBullets(graphics: Graphics, cameraX: number, viewModel: RuntimeViewModel): void {
-  graphics.fillColor = new Color(250, 245, 120, 255);
+function updateBulletSprites(cameraX: number, viewModel: RuntimeViewModel): void {
+  if (!sSpritePoolParent) return;
+
+  // 回收上一帧所有活跃节点到闲置池
+  for (const node of sActiveBulletNodes.splice(0)) {
+    releaseSpriteNode(node, sBulletNodes);
+  }
+
   for (const bullet of viewModel.bullets) {
-    graphics.roundRect(
-      worldToScreenX(bullet.position.x, cameraX) - 9,
-      worldToScreenY(bullet.position.y) - 6,
-      18,
-      12,
-      6
+    const node = ensureSpriteNode(sSpritePoolParent, 'Bullet', sBulletNodes);
+    const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
+    transform.setContentSize(20, 14);
+    const sprite = node.getComponent(Sprite) ?? node.addComponent(Sprite);
+    sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+
+    const sf = getCachedSpriteFrame('art/weapons/player-bullet');
+    if (sf && sprite.spriteFrame !== sf) {
+      sprite.spriteFrame = sf;
+    }
+
+    node.setPosition(
+      worldToScreenX(bullet.position.x, cameraX),
+      worldToScreenY(bullet.position.y)
     );
-    graphics.fill();
+    // 子弹朝向：根据速度方向旋转（物理Y向下 → 屏幕Y向上，取反）
+    node.setScale(1, 1, 1);  // 复位缩放（旧代码用 scale 翻转，现改用 rotation）
+    const angleDeg = Math.atan2(-bullet.velocity.y, bullet.velocity.x) * (180 / Math.PI);
+    node.angle = angleDeg;
+    // 标记为当前帧活跃
+    sActiveBulletNodes.push(node);
   }
 }
 
@@ -422,18 +651,54 @@ function updatePlayerSprite(graphics: Graphics, cameraX: number, viewModel: Runt
   graphics.fill();
 }
 
-function drawResultOverlay(graphics: Graphics, viewModel: RuntimeViewModel): void {
+function drawResultOverlay(
+  graphics: Graphics,
+  viewModel: RuntimeViewModel,
+  resultRoot: Node,
+  resultTitle: Label,
+  resultScore: Label,
+  resultCoins: Label,
+  resultDefeats: Label,
+  resultTime: Label,
+  resultHint: Label
+): void {
   if (!viewModel.result) {
+    resultRoot.active = false;
     return;
   }
-  graphics.fillColor = new Color(255, 255, 255, 210);
-  graphics.roundRect(-220, -95, 440, 190, 18);
+
+  // 显示结果面板
+  resultRoot.active = true;
+
+  // 半透明背景
+  graphics.fillColor = new Color(10, 15, 30, 190);
+  graphics.rect(-VIEW_WIDTH / 2, -VIEW_HEIGHT / 2, VIEW_WIDTH, VIEW_HEIGHT);
   graphics.fill();
+
+  // 面板背景
+  graphics.fillColor = new Color(30, 40, 65, 240);
+  graphics.roundRect(-280, -150, 560, 300, 16);
+  graphics.fill();
+
+  // 底部色条
   graphics.fillColor = viewModel.result.status === 'won'
     ? new Color(80, 172, 104, 255)
     : new Color(205, 80, 80, 255);
-  graphics.rect(-220, 70, 440, 25);
+  graphics.roundRect(-280, 150 - 30, 560, 30, 16);
   graphics.fill();
+
+  // 标题
+  resultTitle.string = viewModel.result.title;
+  resultTitle.color = viewModel.result.status === 'won'
+    ? new Color(102, 187, 106, 255)
+    : new Color(239, 83, 80, 255);
+
+  // 统计数据
+  resultScore.string = `分数: ${viewModel.result.score}`;
+  resultCoins.string = `金币: ${viewModel.result.coins}`;
+  resultDefeats.string = `击败: ${viewModel.result.defeatedEnemies}`;
+  resultTime.string = `用时: ${viewModel.result.elapsedSeconds}s`;
+  resultHint.string = '按 R 重新开始';
 }
 
 function clamp(value: number, min: number, max: number): number {

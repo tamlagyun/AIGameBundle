@@ -192,9 +192,14 @@ export function fireWeapon(state, nowSeconds, input = {}) {
   const boosted = state.player.weaponBoostUntil > nowSeconds;
   const cooldown = boosted ? state.weapon.boostedFireCooldownSeconds : state.weapon.fireCooldownSeconds;
   const aim = normalizeAim(input, state.player.facing);
+  // 子弹从主角视觉中心发射（角色精灵80px高，锚点(0.5,0)在脚底，中心在脚底上方40px）
+  const spawnOffsetY = -40;
   const bullet = {
     id: `bullet-${state.bullets.length + 1}`,
-    position: { ...state.player.position },
+    position: {
+      x: state.player.position.x,
+      y: state.player.position.y + spawnOffsetY
+    },
     velocity: {
       x: aim.x * state.weapon.bulletSpeed,
       y: aim.y * state.weapon.bulletSpeed

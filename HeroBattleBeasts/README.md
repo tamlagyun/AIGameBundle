@@ -57,7 +57,6 @@ HeroBattleBeasts/
       art/
       configs/
   docs/
-  preview/
   scripts/
   tests/
 ```
@@ -119,32 +118,6 @@ Cocos 接入骨架位于 `assets/scripts/cocos`，当前定义连接约定，不
 - `RuntimeNodeBinder`：把 `RuntimeViewModel` 转换为后续 Cocos 节点可执行的绑定计划。
 
 `MainScene.scene` 当前是 Cocos Creator 可直接打开的原生场景资源，包含 `Canvas`、`Camera`、运行时层级节点和 HUD 节点。`GameApp` 节点预留给后续在 Cocos Creator 编辑器中挂载 `GameAppComponent`。
-
-## Web 预览原型
-
-当前提供一个轻量 Web 预览，用于在正式 Cocos 场景接入前快速观察玩法闭环。
-
-运行命令：
-
-```bash
-npm run preview
-```
-
-默认访问：
-
-```text
-http://localhost:5178
-```
-
-预览操作：
-
-- `A` / `ArrowLeft`：向左移动。
-- `D` / `ArrowRight`：向右移动。
-- `W` / `ArrowUp` / `Space`：跳跃意图。
-- `J` / `Z`：射击。
-- `R`：重新开始。
-
-该预览只用于快速验证核心玩法和运行时连接，不替代后续 Cocos 正式场景。
 
 ## Cocos 场景资源骨架
 

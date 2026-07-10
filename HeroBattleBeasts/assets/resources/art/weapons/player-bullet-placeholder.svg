@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" data-role="cartoon-placeholder">
-  <title>玩家子弹卡通占位</title>
-  <rect width="48" height="24" rx="6" fill="#fff4a3"/>
-  <path d="M8 12h24" stroke="#ff7a00" stroke-width="8" stroke-linecap="round"/>
-  <path d="M28 4l14 8-14 8z" fill="#ff3d00"/>
-</svg>

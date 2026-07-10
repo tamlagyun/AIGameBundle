@@ -1,0 +1,38 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "524cf0cb-c7e4-4a5c-9fc7-77975c29b2ba",
+  "files": [".json",".png"],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "524cf0cb-c7e4-4a5c-9fc7-77975c29b2ba@6c48a",
+      "displayName": "weapon-boost",
+      "id": "6c48a",
+      "name": "texture",
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [".json"],
+      "subMetas": {},
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "premultiplyAlpha": false,
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "524cf0cb-c7e4-4a5c-9fc7-77975c29b2ba",
+        "visible": false
+      }
+    }
+  },
+  "userData": {
+    "type": "texture",
+    "redirect": "524cf0cb-c7e4-4a5c-9fc7-77975c29b2ba@6c48a",
+    "hasAlpha": true,
+    "fixAlphaTransparencyArtifacts": false
+  }
+}

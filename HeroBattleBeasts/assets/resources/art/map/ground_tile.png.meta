@@ -1,0 +1,43 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "eae7ff2f-8124-4aa6-9318-d82be4527640",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "eae7ff2f-8124-4aa6-9318-d82be4527640@6c48a",
+      "displayName": "ground_tile",
+      "id": "6c48a",
+      "name": "texture",
+      "userData": {
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "eae7ff2f-8124-4aa6-9318-d82be4527640",
+        "visible": false
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "imageImportType": "sprite-frame",
+    "fixAlphaTransparencyArtifacts": false,
+    "type": "texture",
+    "hasAlpha": true,
+    "redirect": "eae7ff2f-8124-4aa6-9318-d82be4527640@6c48a"
+  }
+}

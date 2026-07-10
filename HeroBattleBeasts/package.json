@@ -8,8 +8,7 @@
   },
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "check": "node scripts/check-project.mjs",
-    "preview": "node scripts/serve-preview.mjs"
+    "check": "node scripts/check-project.mjs"
   },
   "devDependencies": {},
   "uuid": "45cd30c0-6553-4aa2-9e3a-2c3c24c81ed5"

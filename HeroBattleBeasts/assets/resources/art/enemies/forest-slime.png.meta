@@ -1,0 +1,38 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "10cff157-19dc-47e9-a491-a804bbc4d127",
+  "files": [".json",".png"],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "10cff157-19dc-47e9-a491-a804bbc4d127@6c48a",
+      "displayName": "forest-slime",
+      "id": "6c48a",
+      "name": "texture",
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [".json"],
+      "subMetas": {},
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "premultiplyAlpha": false,
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "10cff157-19dc-47e9-a491-a804bbc4d127",
+        "visible": false
+      }
+    }
+  },
+  "userData": {
+    "type": "texture",
+    "redirect": "10cff157-19dc-47e9-a491-a804bbc4d127@6c48a",
+    "hasAlpha": true,
+    "fixAlphaTransparencyArtifacts": false
+  }
+}
