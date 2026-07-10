@@ -22,12 +22,13 @@ import type { RuntimeViewModel } from '../runtime/RuntimeViewModel';
 import {
   VIEW_WIDTH,
   VIEW_HEIGHT,
-  TILE_STANDING_RATIO,
-  SPRITE_ASSETS,
+  DEFAULT_TILE_STANDING_RATIO,
   worldToScreenX,
   worldToScreenY,
   calcTileCocosY,
 } from '../renderer/RenderConfig';
+import { ConfigManager } from '../data/ConfigManager';
+import { createDefaultRegistry } from '../data/GameDefaults';
 
 const BOOTSTRAP_FLAG = '__heroBattleBeastsCocosBootstrapStarted';
 
@@ -76,96 +77,6 @@ function releaseSpriteNode(node: Node, pool: Node[]): void {
   node.active = false;
   pool.push(node);
 }
-
-const playerConfig = {
-  id: 'hero-ranger',
-  displayName: 'Hero Ranger',
-  maxHealth: 5,
-  moveSpeed: 260,
-  jumpVelocity: 620,
-  invulnerableSecondsAfterHit: 1,
-  startWeaponId: 'starter-blaster'
-};
-
-const weaponConfig = {
-  id: 'starter-blaster',
-  displayName: 'Starter Blaster',
-  damage: 1,
-  bulletSpeed: 720,
-  fireCooldownSeconds: 0.22,
-  boostedFireCooldownSeconds: 0.11,
-  boostDurationSeconds: 8
-};
-
-const enemyConfig = {
-  id: 'forest-slime',
-  displayName: 'Forest Slime',
-  maxHealth: 2,
-  contactDamage: 1,
-  moveSpeed: 90,
-  patrolDistance: 160,
-  score: 100
-};
-
-const levelConfig = {
-  schemaVersion: 2,
-  id: 'level-001',
-  displayName: 'Forest Gate',
-  size: { width: 2400, height: 720 },
-  spawnPoints: {
-    playerStart: { x: 320, y: 640 },
-    exit: { x: 2260, y: 560, width: 80, height: 80 }
-  },
-  objective: {
-    type: 'defeatEnemiesAndReachExit',
-    requiredDefeats: 3
-  },
-  physics: {
-    gravity: 1400,
-    maxFallSpeed: 900,
-    playerBounds: { width: 32, height: 48 }
-  },
-  combat: {
-    bulletBounds: { width: 18, height: 12 },
-    enemyBounds: { width: 48, height: 48 },
-    pickupBounds: { width: 32, height: 32 },
-    bulletLifetimeSeconds: 1.2
-  },
-  platforms: [
-    { id: 'ground', x: 0, y: 640, width: 2400, height: 80 },
-    { id: 'bridge-left', x: 420, y: 500, width: 360, height: 36 },
-    { id: 'tree-root-mid', x: 980, y: 420, width: 320, height: 36 },
-    { id: 'bridge-right', x: 1500, y: 520, width: 420, height: 36 }
-  ],
-  encounters: [
-    {
-      id: 'forest-slime-line',
-      enemyId: 'forest-slime',
-      points: [
-        { id: 'slime-a', x: 620, y: 460 },
-        { id: 'slime-b', x: 1160, y: 380 },
-        { id: 'slime-c', x: 1740, y: 480 }
-      ]
-    }
-  ],
-  pickupGroups: [
-    {
-      id: 'coin-line-a',
-      type: 'coin' as const,
-      value: 1,
-      points: [
-        { id: 'coin-a', x: 500, y: 450 },
-        { id: 'coin-b', x: 1080, y: 370 }
-      ]
-    },
-    {
-      id: 'weapon-boost-a',
-      type: 'weaponBoost' as const,
-      weaponId: 'starter-blaster',
-      points: [{ id: 'weapon-boost-a', x: 1580, y: 470 }]
-    }
-  ]
-};
 
 export class GameBootstrap {
   readonly sceneName = 'MainScene';
@@ -254,15 +165,25 @@ export function startCocosRuntimePreview(): void {
     hudNode.setSiblingIndex(6);                                 // HUD
     resultRoot.setSiblingIndex(7);                              // 结果面板（最顶层）
 
-    // 批量加载所有AI精灵图
-    let loadedCount = 0;
-    const totalAssets = SPRITE_ASSETS.length;
-    console.log(`[HeroBattleBeasts] Loading ${totalAssets} sprite assets...`);
-    for (const asset of SPRITE_ASSETS) {
-      resources.load(asset.path, ImageAsset, (err: Error | null, imageAsset: ImageAsset) => {
-        loadedCount++;
+    // 构建配置管理器
+    const registry = createDefaultRegistry();
+    const configManager = new ConfigManager(registry);
+
+    // 获取运行时配置
+    const levelConfig = configManager.getLevelConfig('level-001');
+    const playerConfig = configManager.getPlayerConfig();
+    const weaponConfig = configManager.getWeaponTemplate(playerConfig.startWeaponId);
+    // 关卡中所有敌人的默认配置（取第一个 enemyId）
+    const firstEnemyId = levelConfig.encounters[0]?.enemyId ?? 'forest-slime';
+    const enemyConfig = configManager.getEnemyTemplate(firstEnemyId);
+
+    // 批量加载所有精灵图（由 ConfigManager 统一管理路径列表）
+    const spritePaths = configManager.getAllSpritePaths();
+    console.log(`[HeroBattleBeasts] Loading ${spritePaths.length} sprite assets...`);
+    for (const path of spritePaths) {
+      resources.load(path, ImageAsset, (err: Error | null, imageAsset: ImageAsset) => {
         if (err || !imageAsset) {
-          console.warn(`[HeroBattleBeasts] Failed: ${asset.path}`, err?.message || '');
+          console.warn(`[HeroBattleBeasts] Failed: ${path}`, err?.message || '');
           return;
         }
         try {
@@ -270,19 +191,19 @@ export function startCocosRuntimePreview(): void {
           texture.image = imageAsset;
           const spriteFrame = new SpriteFrame();
           spriteFrame.texture = texture;
-          sSpriteFrameCache.set(asset.path, spriteFrame);
+          sSpriteFrameCache.set(path, spriteFrame);
 
           // 根据路径自动绑定到对应节点
-          if (asset.path.includes('player_hero')) {
+          if (path.includes('player_hero')) {
             playerSprite.spriteFrame = spriteFrame;
-          } else if (asset.path.includes('exit-sign')) {
+          } else if (path.includes('exit-sign')) {
             exitSprite.spriteFrame = spriteFrame;
-          } else if (asset.path.includes('background')) {
+          } else if (path.includes('background')) {
             if (bgSprite) bgSprite.spriteFrame = spriteFrame;
           }
-          console.log(`[HeroBattleBeasts] Loaded: ${asset.path} (${texture.width}x${texture.height})`);
+          console.log(`[HeroBattleBeasts] Loaded: ${path} (${texture.width}x${texture.height})`);
         } catch (e2) {
-          console.warn(`[HeroBattleBeasts] Create failed: ${asset.path}`, e2);
+          console.warn(`[HeroBattleBeasts] Create failed: ${path}`, e2);
         }
       });
     }
@@ -311,7 +232,7 @@ export function startCocosRuntimePreview(): void {
         runtime.restart();
       }
 
-      renderGame(graphics, viewModel,
+      renderGame(configManager, levelConfig, graphics, viewModel,
         resultRoot, resultTitle, resultScore, resultCoins, resultDefeats, resultTime, resultHint);
       renderHud(statusLabel, helpLabel, viewModel);
     };
@@ -412,6 +333,8 @@ function renderHud(statusLabel: Label, helpLabel: Label, viewModel: RuntimeViewM
 }
 
 function renderGame(
+  configManager: ConfigManager,
+  levelConfig: ReturnType<ConfigManager['getLevelConfig']>,
   graphics: Graphics,
   viewModel: RuntimeViewModel,
   resultRoot: Node,
@@ -426,10 +349,10 @@ function renderGame(
 
   graphics.clear();
   updateBackgroundSprite();
-  updatePlatformSprites(cameraX);
+  updatePlatformSprites(configManager, levelConfig, cameraX);
   updateExitSprite(cameraX, viewModel);
-  updatePickupSprites(cameraX, viewModel);
-  updateEnemySprites(cameraX, viewModel);
+  updatePickupSprites(configManager, cameraX, viewModel);
+  updateEnemySprites(configManager, cameraX, viewModel);
   updateBulletSprites(cameraX, viewModel);
   updatePlayerSprite(graphics, cameraX, viewModel);
   drawResultOverlay(graphics, viewModel, resultRoot, resultTitle, resultScore, resultCoins, resultDefeats, resultTime, resultHint);
@@ -442,7 +365,7 @@ function updateBackgroundSprite(): void {
   }
 }
 
-function updatePlatformSprites(cameraX: number): void {
+function updatePlatformSprites(configManager: ConfigManager, levelConfig: ReturnType<ConfigManager['getLevelConfig']>, cameraX: number): void {
   if (!sMapTileParent) return;
 
   // 回收上一帧所有活跃瓦片节点
@@ -453,22 +376,24 @@ function updatePlatformSprites(cameraX: number): void {
     releaseTileNode(node, sPlatformTileNodes);
   }
 
-  const groundSf = getCachedSpriteFrame('art/map/ground_tile');
-  const platformSf = getCachedSpriteFrame('art/map/platform_tile');
-
   for (const platform of levelConfig.platforms) {
-    const isGround = platform.id === 'ground';
-    const sf = isGround ? groundSf : platformSf;
+    // 从平台配置获取 tileType（兼容旧数据：无 tileType 时用 id 推断）
+    const tileType = platform.tileType ?? platform.id;
+    const tileInfo = configManager.getTileSprite(tileType);
+    if (!tileInfo) continue;
+
+    const sf = getCachedSpriteFrame(tileInfo.path);
     if (!sf) continue;
 
-    const tileW = 256;
-    const tileH = isGround ? 80 : 36;
+    const tileW = tileInfo.size[0];
+    const tileH = tileInfo.size[1];
+    const isGround = tileType === 'ground';
     const tilePool = isGround ? sGroundTileNodes : sPlatformTileNodes;
     const activePool = isGround ? sActiveGroundTileNodes : sActivePlatformTileNodes;
 
     const numTiles = Math.ceil(platform.width / tileW);
-    // 根据路基站立比例计算瓦片屏幕位置（共享计算逻辑）
-    const standingRatio = TILE_STANDING_RATIO[platform.id] ?? 0.5;
+    // 根据 tileType 查找站立比例
+    const standingRatio = DEFAULT_TILE_STANDING_RATIO[tileType] ?? 0.5;
     const tileScreenY = calcTileCocosY(platform.y, standingRatio, tileH);
 
     for (let i = 0; i < numTiles; i++) {
@@ -478,7 +403,7 @@ function updatePlatformSprites(cameraX: number): void {
       const node = ensureTileNode(sMapTileParent, isGround ? 'GroundTile' : 'PlatformTile', tilePool);
       const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
       transform.setContentSize(tileW, tileH);
-      transform.setAnchorPoint(0.5, 0);  // 底部中心锚点：底部=图片下沿，图片向上延伸
+      transform.setAnchorPoint(0.5, 0);
 
       const sprite = node.getComponent(Sprite) ?? node.addComponent(Sprite);
       sprite.sizeMode = Sprite.SizeMode.CUSTOM;
@@ -521,7 +446,7 @@ function updateExitSprite(cameraX: number, viewModel: RuntimeViewModel): void {
   sExitNode.setPosition(x, y);
 }
 
-function updatePickupSprites(cameraX: number, viewModel: RuntimeViewModel): void {
+function updatePickupSprites(configManager: ConfigManager, cameraX: number, viewModel: RuntimeViewModel): void {
   if (!sSpritePoolParent) return;
 
   // 回收上一帧所有活跃节点到闲置池
@@ -532,19 +457,18 @@ function updatePickupSprites(cameraX: number, viewModel: RuntimeViewModel): void
   for (const pickup of viewModel.pickups) {
     if (pickup.collected) continue;
 
-    const assetPath = pickup.type === 'weaponBoost'
-      ? 'art/pickups/weapon-boost'
-      : 'art/pickups/coin';
-    const size: [number, number] = [28, 28];
+    // 从配置管理器获取实体精灵信息（支持任意道具类型扩展）
+    const spriteInfo = configManager.getEntitySprite(pickup.type);
+    if (!spriteInfo) continue;
 
     const node = ensureSpriteNode(sSpritePoolParent, `Pickup_${pickup.id}`, sPickupNodes);
     const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
-    transform.setContentSize(size[0], size[1]);
-    transform.setAnchorPoint(0.5, 0);  // 底部中心：与玩家站在同一平台面
+    transform.setContentSize(spriteInfo.size[0], spriteInfo.size[1]);
+    transform.setAnchorPoint(0.5, 0);
     const sprite = node.getComponent(Sprite) ?? node.addComponent(Sprite);
     sprite.sizeMode = Sprite.SizeMode.CUSTOM;
 
-    const sf = getCachedSpriteFrame(assetPath);
+    const sf = getCachedSpriteFrame(spriteInfo.spritePath);
     if (sf && sprite.spriteFrame !== sf) {
       sprite.spriteFrame = sf;
     }
@@ -559,7 +483,7 @@ function updatePickupSprites(cameraX: number, viewModel: RuntimeViewModel): void
   }
 }
 
-function updateEnemySprites(cameraX: number, viewModel: RuntimeViewModel): void {
+function updateEnemySprites(configManager: ConfigManager, cameraX: number, viewModel: RuntimeViewModel): void {
   if (!sSpritePoolParent) return;
 
   // 回收上一帧所有活跃节点到闲置池
@@ -570,14 +494,18 @@ function updateEnemySprites(cameraX: number, viewModel: RuntimeViewModel): void 
   for (const enemy of viewModel.enemies) {
     if (enemy.defeated) continue;
 
+    // 根据 enemyId 从配置管理器获取精灵信息（支持不同敌人不同精灵）
+    const spriteInfo = configManager.getEntitySprite(enemy.enemyId);
+    if (!spriteInfo) continue;
+
     const node = ensureSpriteNode(sSpritePoolParent, `Enemy_${enemy.id}`, sEnemyNodes);
     const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
-    transform.setContentSize(56, 56);
-    transform.setAnchorPoint(0.5, 0);  // 底部中心：与玩家站在同一平台面
+    transform.setContentSize(spriteInfo.size[0], spriteInfo.size[1]);
+    transform.setAnchorPoint(0.5, 0);
     const sprite = node.getComponent(Sprite) ?? node.addComponent(Sprite);
     sprite.sizeMode = Sprite.SizeMode.CUSTOM;
 
-    const sf = getCachedSpriteFrame('art/enemies/forest-slime');
+    const sf = getCachedSpriteFrame(spriteInfo.spritePath);
     if (sf && sprite.spriteFrame !== sf) {
       sprite.spriteFrame = sf;
     }
@@ -587,7 +515,7 @@ function updateEnemySprites(cameraX: number, viewModel: RuntimeViewModel): void 
       worldToScreenX(enemy.position.x, cameraX),
       worldToScreenY(enemy.position.y + 40)
     );
-    // 史莱姆面向玩家
+    // 面向玩家
     node.setScale(enemy.position.x > viewModel.player.position.x ? -1 : 1, 1, 1);
     // 标记为当前帧活跃
     sActiveEnemyNodes.push(node);

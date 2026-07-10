@@ -3,7 +3,7 @@
   "displayName": "森林小勇士",
   "maxHealth": 5,
   "moveSpeed": 260,
-  "jumpVelocity": 620,
+  "jumpVelocity": 640,
   "invulnerableSecondsAfterHit": 1.0,
   "startWeaponId": "starter-blaster"
 }

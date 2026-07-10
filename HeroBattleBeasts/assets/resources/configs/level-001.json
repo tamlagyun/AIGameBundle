@@ -2,6 +2,7 @@
   "schemaVersion": 2,
   "id": "level-001",
   "displayName": "怪兽森林入口",
+  "backgroundId": "forest-bg",
   "size": {
     "width": 2400,
     "height": 720
@@ -46,10 +47,10 @@
     "bulletLifetimeSeconds": 1.2
   },
   "platforms": [
-    { "id": "ground", "x": 0, "y": 640, "width": 2400, "height": 80 },
-    { "id": "bridge-left", "x": 420, "y": 500, "width": 360, "height": 36 },
-    { "id": "tree-root-mid", "x": 980, "y": 420, "width": 320, "height": 36 },
-    { "id": "bridge-right", "x": 1500, "y": 520, "width": 420, "height": 36 }
+    { "id": "ground", "x": 0, "y": 640, "width": 2400, "height": 80, "tileType": "ground" },
+    { "id": "bridge-left", "x": 420, "y": 500, "width": 360, "height": 36, "tileType": "platform" },
+    { "id": "tree-root-mid", "x": 980, "y": 420, "width": 320, "height": 36, "tileType": "platform" },
+    { "id": "bridge-right", "x": 1500, "y": 520, "width": 420, "height": 36, "tileType": "platform" }
   ],
   "encounters": [
     {

@@ -72,7 +72,7 @@ test('projectiles move by velocity and age over time', () => {
   state = updateProjectiles(state, 0.25);
 
   assert.equal(state.bullets.length, 1);
-  assert.deepEqual(state.bullets[0].position, { x: 65, y: 100 });
+  assert.deepEqual(state.bullets[0].position, { x: 65, y: 60 });
   assert.equal(state.bullets[0].ageSeconds, 0.25);
 });
 

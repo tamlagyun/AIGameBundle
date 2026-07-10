@@ -5,6 +5,25 @@ export type Rect = Vector2 & {
   height: number;
 };
 
+export type PhysicsConfig = {
+  gravity: number;
+  maxFallSpeed: number;
+  playerBounds: { width: number; height: number };
+};
+
+export type CombatConfig = {
+  bulletBounds: { width: number; height: number };
+  enemyBounds: { width: number; height: number };
+  pickupBounds: { width: number; height: number };
+  bulletLifetimeSeconds: number;
+};
+
+export type PlatformConfig = Rect & {
+  id: string;
+  tileType?: string;
+  tileSprite?: string;
+};
+
 export type LevelEncounterPoint = Vector2 & {
   id: string;
   enemyId?: string;
@@ -44,9 +63,12 @@ export type ExpandedLevelConfig = {
     type: string;
     requiredDefeats: number;
   };
-  platforms?: Rect[];
+  physics?: PhysicsConfig;
+  combat?: CombatConfig;
+  platforms?: PlatformConfig[];
   encounters?: LevelEncounter[];
   pickupGroups?: LevelPickupGroup[];
+  backgroundId?: string;
 };
 
 export type GameplayEnemySpawn = Vector2 & {

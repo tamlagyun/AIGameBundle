@@ -7,12 +7,14 @@ import test from 'node:test';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const fromRoot = (...parts) => join(root, ...parts);
 
+// AI 生成的 PNG 精灵图已替代以下 SVG 占位文件：
+// - art/characters/hero-placeholder.svg
+// - art/enemies/forest-slime-placeholder.svg
+// - art/weapons/player-bullet-placeholder.svg
+// - art/pickups/coin-placeholder.svg
+// - art/pickups/weapon-boost-placeholder.svg
+// 仅保留 HUD 图标 SVGs
 const expectedArtAssets = [
-  'assets/resources/art/characters/hero-placeholder.svg',
-  'assets/resources/art/enemies/forest-slime-placeholder.svg',
-  'assets/resources/art/weapons/player-bullet-placeholder.svg',
-  'assets/resources/art/pickups/coin-placeholder.svg',
-  'assets/resources/art/pickups/weapon-boost-placeholder.svg',
   'assets/resources/art/ui/hud-heart.svg',
   'assets/resources/art/ui/hud-coin.svg',
   'assets/resources/art/ui/hud-weapon.svg'
