@@ -24,6 +24,6 @@ test('编辑器平台服务提供内存存档与安全降级', async () => {
 
 test('未接入 SDK 的平台适配器明确失败', () => {
   assert.equal(createPlatformService('editor').target, 'editor');
+  assert.equal(createPlatformService('web').target, 'web');
   assert.throws(() => createPlatformService('wechat'), /requires its SDK integration/);
 });
-

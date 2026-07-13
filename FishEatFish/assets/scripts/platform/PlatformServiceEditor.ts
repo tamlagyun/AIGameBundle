@@ -1,11 +1,15 @@
 import type { SaveData } from '../core/types.ts';
-import type { PlatformResult, PlatformService, SafeAreaInsets } from './PlatformService.ts';
+import type { PlatformResult, PlatformService, PlatformTarget, SafeAreaInsets } from './PlatformService.ts';
 
 export class PlatformServiceEditor implements PlatformService {
-  readonly target = 'editor' as const;
+  readonly target: Extract<PlatformTarget, 'editor' | 'web'>;
   private memorySave: SaveData | null = null;
   private readonly pauseCallbacks = new Set<() => void>();
   private readonly resumeCallbacks = new Set<() => void>();
+
+  constructor(target: Extract<PlatformTarget, 'editor' | 'web'> = 'editor') {
+    this.target = target;
+  }
 
   async init(): Promise<void> {}
 
@@ -46,4 +50,3 @@ export class PlatformServiceEditor implements PlatformService {
     return () => this.resumeCallbacks.delete(callback);
   }
 }
-

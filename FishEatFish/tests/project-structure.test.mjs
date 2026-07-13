@@ -15,6 +15,7 @@ test('Cocos 3.8.8 工程骨架和中文档案存在', () => {
     'assets/resources/configs/world-sea-001.json',
     'docs/game-requirements.md',
     'docs/art-prompts.md',
+    '.gitattributes',
     'AGENTS.md'
   ];
   assert.deepEqual(required.filter((path) => !existsSync(fromRoot(path))), []);

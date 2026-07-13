@@ -10,7 +10,7 @@ export class GameBootstrap extends Component {
 
   protected async start(): Promise<void> {
     view.setDesignResolutionSize(1280, 720, ResolutionPolicy.SHOW_ALL);
-    const platform = createPlatformService('editor');
+    const platform = createPlatformService('web');
     await platform.init();
     this.removePauseListener = platform.onPause(() => this.node.pauseSystemEvents(true));
     this.removeResumeListener = platform.onResume(() => this.node.resumeSystemEvents(true));
@@ -21,4 +21,3 @@ export class GameBootstrap extends Component {
     this.removeResumeListener?.();
   }
 }
-

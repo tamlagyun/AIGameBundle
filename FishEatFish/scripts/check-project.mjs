@@ -7,6 +7,7 @@ const fromRoot = (...parts) => join(root, ...parts);
 const required = [
   'AGENTS.md',
   'README.md',
+  '.gitattributes',
   'package.json',
   'tsconfig.json',
   'assets/scenes/MainScene.scene',
