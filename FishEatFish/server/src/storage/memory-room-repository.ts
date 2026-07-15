@@ -1,0 +1,2 @@
+export interface MemoryRoomRepository { save<T>(id: string, value: T): void; get<T>(id: string): T | undefined; delete(id: string): void; }
+export class InMemoryRoomRepository implements MemoryRoomRepository { private readonly values = new Map<string, unknown>(); save<T>(id: string, value: T) { this.values.set(id, value); } get<T>(id: string) { return this.values.get(id) as T | undefined; } delete(id: string) { this.values.delete(id); } }

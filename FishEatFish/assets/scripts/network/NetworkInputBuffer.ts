@@ -1,0 +1,2 @@
+export interface NetworkInput { clientTick: number; moveX: number; moveY: number; rotation: number; }
+export class NetworkInputBuffer { private readonly values: NetworkInput[] = []; push(value: NetworkInput) { this.values.push(value); if (this.values.length > 120) this.values.shift(); } after(tick: number) { return this.values.filter((value) => value.clientTick > tick); } clearBefore(tick: number) { while (this.values[0]?.clientTick <= tick) this.values.shift(); } }

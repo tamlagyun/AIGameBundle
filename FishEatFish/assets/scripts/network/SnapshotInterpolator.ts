@@ -1,0 +1,2 @@
+import type { RemotePlayerState } from './NetworkProtocol.ts';
+export class SnapshotInterpolator { private readonly states = new Map<string, RemotePlayerState>(); update(players: RemotePlayerState[]) { for (const player of players) this.states.set(player.playerId, player); } get(playerId: string) { return this.states.get(playerId); } remove(playerId: string) { this.states.delete(playerId); } values() { return this.states.values(); } }

@@ -11,9 +11,11 @@
     "test": "node --test tests/*.test.mjs",
     "check": "node scripts/check-project.mjs",
     "hygiene": "node scripts/check-hygiene.mjs",
-    "build:target": "node scripts/build-target.mjs"
+    "build:target": "node scripts/build-target.mjs",
+    "server:test": "npm --prefix server test",
+    "server:typecheck": "npm --prefix server run typecheck",
+    "server:dev": "npm --prefix server run dev"
   },
   "devDependencies": {},
   "uuid": "bbdb57ca-6992-4b89-b966-527a637c7afb"
 }
-

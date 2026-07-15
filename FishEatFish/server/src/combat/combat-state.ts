@@ -1,0 +1,4 @@
+import { PLAYER_EXPERIENCE_REWARD, PLAYER_MAX_HEALTH } from './combat-config.js';
+export interface CombatState { health: number; maxHealth: number; level: number; experience: number; kills: number; dead: boolean; respawnAt?: number; invulnerableUntil?: number; skillCooldowns: Record<string, number>; lastSkillTick: number; }
+export const createCombatState = (): CombatState => ({ health: PLAYER_MAX_HEALTH, maxHealth: PLAYER_MAX_HEALTH, level: 1, experience: 0, kills: 0, dead: false, skillCooldowns: {}, lastSkillTick: 0 });
+export const addExperience = (state: CombatState, reward = PLAYER_EXPERIENCE_REWARD): boolean => { state.experience += reward; let leveled = false; while (state.experience >= state.level * 100) { state.experience -= state.level * 100; state.level += 1; state.maxHealth += 20; state.health = Math.min(state.maxHealth, state.health + 20); leveled = true; } return leveled; };

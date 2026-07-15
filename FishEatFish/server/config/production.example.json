@@ -1,0 +1,14 @@
+{
+  "host": "0.0.0.0",
+  "httpPort": 3000,
+  "websocketPath": "/ws",
+  "tickRate": 20,
+  "snapshotRate": 10,
+  "roomCapacity": 50,
+  "mapId": "sea-default-001",
+  "mapWidth": 3840,
+  "mapHeight": 2160,
+  "playerSpeed": 260,
+  "authMode": "memory",
+  "disconnectPolicy": "remove-immediately"
+}

@@ -21,12 +21,27 @@ const required = [
   'assets/resources/configs/skill-basic-bite.json',
   'assets/resources/configs/skill-dash-bite.json',
   'assets/resources/configs/world-sea-001.json',
+  'assets/resources/art/map/sea-background.png',
+  'assets/resources/art/characters/player/swim-0.png',
+  'assets/resources/art/characters/player/swim-5.png',
   'docs/game-requirements.md',
   'docs/requirements-changelog.md',
   'docs/art-direction.md',
   'docs/art-prompts.md',
   'docs/art-assets-register.md',
   'build-config/targets.json'
+  ,'server/package.json'
+  ,'server/tsconfig.json'
+  ,'server/src/app.ts'
+  ,'server/src/server.ts'
+  ,'server/src/protocol/protocol-version.ts'
+  ,'server/src/room/room.ts'
+  ,'server/tests/room.test.ts'
+  ,'docs/server-architecture.md'
+  ,'docs/server-directory.md'
+  ,'docs/realtime-protocol.md'
+  ,'docs/auth-and-platform-adapters.md'
+  ,'docs/deployment.md'
 ];
 
 const missing = required.filter((path) => !existsSync(fromRoot(path)));
