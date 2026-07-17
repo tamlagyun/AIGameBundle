@@ -183,6 +183,14 @@ test('鱼儿头顶血条、血量和用户名由独立 HUD Overlay 类管理', (
   assert.match(health, /this\.fill\.fillType = Sprite\.FillType\.HORIZONTAL/);
   assert.match(health, /this\.fill\.fillRange = safeHealth \/ safeMaxHealth/);
   assert.match(health, /this\.label\.string = `\$\{Math\.ceil\(safeHealth\)\}\/\$\{Math\.ceil\(safeMaxHealth\)\}`/);
+  assert.match(health, /this\.label\.enableOutline = true/);
+  assert.match(health, /this\.label\.useSystemFont = true/);
+  assert.match(health, /this\.label\.cacheMode = Label\.CacheMode\.NONE/);
+  assert.match(health, /this\.label\.outlineWidth = 2/);
+  assert.match(name, /this\.label\.enableOutline = true/);
+  assert.match(name, /this\.label\.useSystemFont = true/);
+  assert.match(name, /this\.label\.cacheMode = Label\.CacheMode\.NONE/);
+  assert.match(name, /this\.label\.outlineWidth = 2/);
   assert.match(health, /world\.y \+= 120/);
   assert.match(name, /world\.y \+= 160/);
   assert.match(health, /overlayTransform\.convertToNodeSpaceAR\(world\)/);
@@ -232,7 +240,8 @@ test('技能名称位于图标内部下侧并与图标下边缘对齐', () => {
   assert.match(labelSource, /transform\.setAnchorPoint\(0\.5, 0\)/);
   assert.match(labelSource, /label\.verticalAlign = Label\.VerticalAlign\.BOTTOM/);
   assert.match(labelSource, /node\.setPosition\(0, -parentTransform\.height \/ 2, 0\)/);
-  assert.match(labelSource, /label\.outlineColor = new Color\(8, 35, 58, 255\)/);
+  assert.match(labelSource, /label\.outlineColor = new Color\(4, 18, 34, 255\)/);
+  assert.match(labelSource, /label\.enableOutline = true/);
   assert.match(labelSource, /label\.outlineWidth = 2/);
   assert.doesNotMatch(labelSource, /height \/ 2 - 18/);
 });

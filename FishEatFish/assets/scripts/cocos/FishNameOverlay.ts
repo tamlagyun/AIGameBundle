@@ -16,6 +16,11 @@ export class FishNameOverlay {
     this.label.lineHeight = 24;
     this.label.horizontalAlign = Label.HorizontalAlign.CENTER;
     this.label.color = new Color(255, 255, 255, 255);
+    this.label.useSystemFont = true;
+    this.label.cacheMode = Label.CacheMode.NONE;
+    this.label.enableOutline = true;
+    this.label.outlineColor = new Color(4, 18, 34, 255);
+    this.label.outlineWidth = 2;
     parent.addChild(this.node);
     this.setName(name);
   }

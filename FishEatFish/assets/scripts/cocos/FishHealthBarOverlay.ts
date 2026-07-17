@@ -57,7 +57,10 @@ export class FishHealthBarOverlay {
     this.label.horizontalAlign = Label.HorizontalAlign.CENTER;
     this.label.verticalAlign = Label.VerticalAlign.CENTER;
     this.label.color = new Color(255, 255, 255, 255);
-    this.label.outlineColor = new Color(8, 35, 58, 255);
+    this.label.useSystemFont = true;
+    this.label.cacheMode = Label.CacheMode.NONE;
+    this.label.enableOutline = true;
+    this.label.outlineColor = new Color(4, 18, 34, 255);
     this.label.outlineWidth = 2;
     this.node.addChild(labelNode);
     labelNode.setPosition(0, 0, 0);

@@ -71,3 +71,8 @@
 | 0.2.36 | 2026-07-17 | 新增技能 4“大王喷墨”：16 方向黑墨柱、固定释放点、0.5 秒喷洒与 0.5 秒延迟扩散，服务器按 10 米范围结算 25 点伤害 | 技能配置、CombatService、Room、SkillEffectExecutor、GameBootstrap、网络协议 | 逻辑已实施，图标待提示词确认与生成 |
 | 0.2.37 | 2026-07-17 | 完成 `ART-PROMPT-UI-0009 v1` 中文提示词确认、调用和正式技能图标接入 | art-prompts、art-assets-register、技能 4 配置与 Cocos 资源 | 已实施，待 IDE/Web 视觉与联机验收 |
 | 0.2.38 | 2026-07-17 | 修正大王喷墨表现：移除长方形墨柱，改为 16 路不规则墨团、散落墨滴和中心墨云的泼洒效果 | GameBootstrap、需求档案 | 已实施，待 IDE/Web 视觉验收 |
+| 0.2.39 | 2026-07-17 | 增强技能按钮名称可读性：统一使用深色 4 px Label 描边，不改变技能区布局、触摸区域和冷却蒙板 | SkillActionPanel、UI 布局规则 | 已实施，待 IDE/Web 视觉验收 |
+| 0.2.40 | 2026-07-17 | 修复技能名称描边未生效：显式启用 `Label.enableOutline`，保留深色 4 px 描边参数 | SkillActionPanel、UI 布局规则与回归测试 | 已实施，待 IDE/Web 视觉验收 |
+| 0.2.41 | 2026-07-17 | 将技能名称描边从 4 px 调整为 2 px，避免描边过粗造成文字和背景发黑 | SkillActionPanel、UI 布局规则 | 已实施，待 IDE/Web 视觉验收 |
+| 0.2.42 | 2026-07-17 | 为鱼儿头顶血量数字和用户名启用深色 2 px Label 描边，保持血条与名字的独立 HUD 跟随逻辑不变 | FishHealthBarOverlay、FishNameOverlay、UI 布局规则 | 已实施，待 IDE/Web 视觉验收 |
+| 0.2.43 | 2026-07-17 | 修正血量和名字描边未参与渲染：显式锁定系统字体与 `Label.CacheMode.NONE`，技能名称同步补齐相同前置条件 | 三个 HUD Label 组件、UI 布局规则与回归测试 | 已实施，待 IDE/Web 视觉验收 |

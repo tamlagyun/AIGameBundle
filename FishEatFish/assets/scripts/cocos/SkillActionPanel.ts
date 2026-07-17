@@ -176,7 +176,11 @@ export class SkillActionPanel {
     label.horizontalAlign = Label.HorizontalAlign.CENTER;
     label.verticalAlign = Label.VerticalAlign.BOTTOM;
     label.color = new Color(255, 255, 255, 255);
-    label.outlineColor = new Color(8, 35, 58, 255);
+    // 技能图标下侧文字必须在不同海底背景和冷却蒙板上保持可读。
+    label.useSystemFont = true;
+    label.cacheMode = Label.CacheMode.NONE;
+    label.enableOutline = true;
+    label.outlineColor = new Color(4, 18, 34, 255);
     label.outlineWidth = 2;
     parent.addChild(node);
     node.setPosition(0, -parentTransform.height / 2, 0);
