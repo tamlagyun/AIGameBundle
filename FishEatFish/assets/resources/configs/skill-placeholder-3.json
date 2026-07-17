@@ -1,27 +1,27 @@
 {
   "schemaVersion": 2,
-  "id": "skill-placeholder-3",
-  "displayName": "技能3",
-  "networkSkillId": "skill-dash-bite",
-  "animationState": "dashBite",
-  "damage": 30,
-  "range": 96,
-  "cooldownSeconds": 5,
-  "dashDistance": 240,
+  "id": "skill-death-roll",
+  "displayName": "死亡翻滚",
+  "networkSkillId": "skill-death-roll",
+  "animationState": "deathRoll",
+  "damage": 3,
+  "range": 120,
+  "cooldownSeconds": 7,
+  "dashDistance": 0,
   "ui": {
-    "nodeName": "SkillPlaceholderButton3",
+    "nodeName": "SkillDeathRollButton",
     "slot": "arc",
     "slotIndex": 2,
-    "iconPath": "art/ui/skill-dash",
-    "cooldownGroup": "dash"
+    "iconPath": "art/ui/skill-death-roll",
+    "cooldownGroup": "death-roll"
   },
   "clientEffect": {
-    "kind": "dashBite",
-    "animationDurationSeconds": 0.42,
-    "visualOffset": 84,
-    "visualRadius": 96,
-    "visualDurationSeconds": 0.22,
-    "visualColor": { "r": 120, "g": 230, "b": 255, "a": 235 },
-    "hint": "技能3：暂用冲刺撕咬效果"
+    "kind": "deathRoll",
+    "animationDurationSeconds": 1.15,
+    "visualOffset": 64,
+    "visualRadius": 120,
+    "visualDurationSeconds": 0.45,
+    "visualColor": { "r": 255, "g": 214, "b": 92, "a": 235 },
+    "hint": "死亡翻滚：翻滚一圈，造成 3 点伤害"
   }
 }

@@ -82,3 +82,18 @@ test('whale swallow without a target does not consume its input tick or cooldown
   const accepted = combat.useSkill(attacker, 'skill-whale-swallow', 1, [attacker, target], 0, 2);
   assert.equal(accepted.accepted, true);
 });
+
+test('ink splash locks its release center and damages every player in the 10 meter radius', () => {
+  const combat = new CombatService();
+  const attacker = player('a', 0, 0);
+  const inside = player('b', 500, 0);
+  const outside = player('c', 700, 0);
+  const accepted = combat.useSkill(attacker, 'skill-ink-splash', 1, [attacker, inside, outside], 0, 1);
+  assert.equal(accepted.accepted, true);
+  assert.equal(accepted.hitCount, 0);
+  attacker.x = 1000;
+  const events = combat.resolveInkSplash(attacker, 0, 0, [attacker, inside, outside], 1000, 21);
+  assert.equal(inside.combat.health, 75);
+  assert.equal(outside.combat.health, 100);
+  assert.equal(events.filter((event) => event.type === 'hitConfirmed').length, 1);
+});

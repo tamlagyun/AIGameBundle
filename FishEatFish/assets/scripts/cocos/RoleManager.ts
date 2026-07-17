@@ -20,7 +20,7 @@ export class RoleManager {
     const existing = this.roles.get(id);
     if (existing instanceof LocalPlayer) return existing;
     const role = this.createNode('PlayerFish');
-    const player = new LocalPlayer(id, role.node, role.sprite, this.artFacingDirection);
+    const player = new LocalPlayer(id, role.node, role.sprite, role.visualNode, this.artFacingDirection);
     this.roles.set(id, player);
     return player;
   }
@@ -29,7 +29,7 @@ export class RoleManager {
     const existing = this.roles.get(id);
     if (existing) return existing;
     const role = this.createNode(`RemotePlayer-${id}`);
-    const player = new Player(id, role.node, role.sprite, this.artFacingDirection);
+    const player = new Player(id, role.node, role.sprite, role.visualNode, this.artFacingDirection);
     this.roles.set(id, player);
     return player;
   }
@@ -49,15 +49,20 @@ export class RoleManager {
     for (const id of [...this.roles.keys()]) this.remove(id);
   }
 
-  private createNode(nodeName: string): { node: Node; sprite: Sprite } {
+  private createNode(nodeName: string): { node: Node; sprite: Sprite; visualNode: Node } {
     const node = new Node(nodeName);
     node.layer = this.playerLayer.layer;
     const transform = node.addComponent(UITransform);
     transform.setContentSize(196, 196);
-    const sprite = node.addComponent(Sprite);
+    const visualNode = new Node('FishVisual');
+    visualNode.layer = node.layer;
+    const visualTransform = visualNode.addComponent(UITransform);
+    visualTransform.setContentSize(196, 196);
+    const sprite = visualNode.addComponent(Sprite);
     sprite.sizeMode = Sprite.SizeMode.CUSTOM;
     sprite.spriteFrame = this.initialFrame ?? null;
+    node.addChild(visualNode);
     this.playerLayer.addChild(node);
-    return { node, sprite };
+    return { node, sprite, visualNode };
   }
 }

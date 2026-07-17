@@ -44,8 +44,8 @@ export const parseFishConfig = (value: unknown): FishConfig => {
 
 export const parseSkillConfig = (value: unknown): SkillConfig => {
   const config = requireBase(value, 'skill');
-  if (config.animationState !== 'bite' && config.animationState !== 'dashBite' && config.animationState !== 'whaleSwallow') {
-    throw new Error('animationState must be bite, dashBite or whaleSwallow');
+  if (config.animationState !== 'bite' && config.animationState !== 'dashBite' && config.animationState !== 'whaleSwallow' && config.animationState !== 'deathRoll' && config.animationState !== 'inkSplash') {
+    throw new Error('animationState must be bite, dashBite, whaleSwallow, deathRoll or inkSplash');
   }
   requireNonNegative(config.damage, 'damage');
   requirePositive(config.range, 'range');
@@ -60,12 +60,15 @@ export const parseSkillConfig = (value: unknown): SkillConfig => {
   if (typeof config.ui.iconPath !== 'string' || config.ui.iconPath.length === 0) throw new Error('ui.iconPath is required');
   if (typeof config.ui.cooldownGroup !== 'string' || config.ui.cooldownGroup.length === 0) throw new Error('ui.cooldownGroup is required');
   if (!isRecord(config.clientEffect)) throw new Error('clientEffect must be an object');
-  if (config.clientEffect.kind !== 'bite' && config.clientEffect.kind !== 'dashBite' && config.clientEffect.kind !== 'whaleSwallow') throw new Error('clientEffect.kind is invalid');
+  if (config.clientEffect.kind !== 'bite' && config.clientEffect.kind !== 'dashBite' && config.clientEffect.kind !== 'whaleSwallow' && config.clientEffect.kind !== 'deathRoll' && config.clientEffect.kind !== 'inkSplash') throw new Error('clientEffect.kind is invalid');
   requirePositive(config.clientEffect.animationDurationSeconds, 'clientEffect.animationDurationSeconds');
   requireNonNegative(config.clientEffect.visualOffset, 'clientEffect.visualOffset');
   requirePositive(config.clientEffect.visualRadius, 'clientEffect.visualRadius');
   requirePositive(config.clientEffect.visualDurationSeconds, 'clientEffect.visualDurationSeconds');
   if (typeof config.clientEffect.hint !== 'string') throw new Error('clientEffect.hint must be a string');
+  for (const key of ['rayCount', 'rayLength', 'sprayDurationSeconds', 'expansionDelaySeconds', 'expansionDurationSeconds']) {
+    if (config.clientEffect[key] !== undefined) requirePositive(config.clientEffect[key], `clientEffect.${key}`);
+  }
   if (!isRecord(config.clientEffect.visualColor)) throw new Error('clientEffect.visualColor must be an object');
   for (const color of ['r', 'g', 'b', 'a']) {
     const value = config.clientEffect.visualColor[color];

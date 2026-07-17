@@ -53,6 +53,13 @@ export class CombatService {
       };
     }
 
+    // 喷墨技能先锁定释放点和冷却，伤害在喷洒完成并开始扩散时由 Room 定时结算。
+    if (skillId === 'skill-ink-splash') {
+      source.combat.lastSkillTick = clientTick;
+      source.combat.skillCooldowns[skillId] = now + config.cooldownSeconds * 1000;
+      return { accepted: true, hitCount: 0, events: [] };
+    }
+
     source.combat.lastSkillTick = clientTick;
     source.combat.skillCooldowns[skillId] = now + config.cooldownSeconds * 1000;
     if (config.dashDistance > 0) applyDash?.(config.dashDistance);
@@ -73,6 +80,28 @@ export class CombatService {
       }
     }
     return { accepted: true, hitCount: events.filter((event) => event.type === 'hitConfirmed').length, events };
+  }
+
+  resolveInkSplash(source: CombatPlayer, centerX: number, centerY: number, players: CombatPlayer[], now: number, serverTick: number): CombatEvent[] {
+    const config = combatSkills['skill-ink-splash'];
+    const events: CombatEvent[] = [];
+    for (const target of players) {
+      if (target.playerId === source.playerId || target.combat.dead || (target.combat.invulnerableUntil ?? 0) > now) continue;
+      const distance = Math.hypot(target.x - centerX, target.y - centerY);
+      if (distance > config.range + (target.radius ?? PLAYER_HIT_RADIUS)) continue;
+      target.combat.health = Math.max(0, target.combat.health - config.damage);
+      events.push({ type: 'hitConfirmed', payload: { attackerId: source.playerId, targetId: target.playerId, skillId: 'skill-ink-splash', serverTick } });
+      events.push({ type: 'playerDamaged', payload: { attackerId: source.playerId, targetId: target.playerId, skillId: 'skill-ink-splash', damage: config.damage, health: target.combat.health, maxHealth: target.combat.maxHealth, serverTick } });
+      if (target.combat.health <= 0) {
+        target.combat.dead = true;
+        target.combat.respawnAt = respawnAt(now);
+        source.combat.kills += 1;
+        const leveled = addExperience(source.combat);
+        events.push({ type: 'playerDied', payload: { attackerId: source.playerId, targetId: target.playerId, respawnAt: target.combat.respawnAt, serverTick } });
+        events.push({ type: 'combatSettlement', payload: { playerId: source.playerId, kills: source.combat.kills, experience: source.combat.experience, level: source.combat.level, maxHealth: source.combat.maxHealth, health: source.combat.health, leveled, serverTick } });
+      }
+    }
+    return events;
   }
   respawn(player: CombatPlayer, now: number, x: number, y: number, serverTick: number): CombatEvent | undefined {
     if (!player.combat.dead || !player.combat.respawnAt || now < player.combat.respawnAt) return undefined;

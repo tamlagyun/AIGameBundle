@@ -1,5 +1,5 @@
 export const NETWORK_PROTOCOL_VERSION = 1;
-export type SkillId = 'skill-basic-bite' | 'skill-dash-bite' | 'skill-whale-swallow';
+export type SkillId = 'skill-basic-bite' | 'skill-dash-bite' | 'skill-whale-swallow' | 'skill-death-roll' | 'skill-ink-splash';
 export type ClientMessageType = 'joinRoom' | 'input' | 'skill' | 'ping' | 'leaveRoom';
 export type ServerMessageType = 'roomSnapshot' | 'playerJoined' | 'playerRemoved' | 'stateSnapshot' | 'stateCorrection' | 'skillEffect' | 'skillResolved' | 'hitConfirmed' | 'playerDamaged' | 'playerDied' | 'playerRespawned' | 'combatSettlement' | 'pong' | 'error';
 export interface NetworkMessage<T = unknown> { protocolVersion: number; type: ClientMessageType | ServerMessageType; requestId?: string; payload: T; }

@@ -64,3 +64,10 @@
 | 0.2.29 | 2026-07-16 | 修复 UI 运行阻塞：恢复 `GameBootstrap` 对实际使用的 `Widget` 导入，并将血条和技能标签描边从已弃用的 `LabelOutline` 组件迁移到 `Label.outlineColor/outlineWidth` | UI 组件、登录弹窗、血条与技能标签、UI 布局规则 | 已实施，待 IDE/Web 控制台与视觉验收 |
 | 0.2.30 | 2026-07-16 | 建立 `Player` 与 `LocalPlayer extends Player` 层级：所有玩家共享位置、朝向、生命、死亡及视觉状态，本地主角额外封装预测移动与转向；RoleManager 改为管理玩家对象而不是裸节点 | Player、LocalPlayer、RoleManager、GameBootstrap、结构回归测试 | 已实施，待 IDE/Web 多人联机验收 |
 | 0.2.31 | 2026-07-16 | 将大世界启动时的固定 HUD 节点创建抽离至 `MainUIManager`：统一创建和暴露 `InputLayer`、头顶信息承载层、提示/生命标签、完整摇杆根节点和配置驱动技能面板；`GameBootstrap` 只协调资源、输入、网络与玩法状态 | MainUIManager、GameBootstrap、UI 结构回归测试 | 已实施，待 IDE/Web 双端视觉与触摸验收 |
+| 0.2.32 | 2026-07-17 | 新增技能 3“死亡翻滚”：服务器权威扇形命中与 3 点伤害，攻击者和目标同步一圈视觉翻滚，保持服务器坐标不变；新增独立技能配置与图标提示词存档，待用户确认后生成正式 PNG | combat-config、SkillConfig、NetworkProtocol、SkillEffectExecutor、Player、RemotePlayerRegistry、GameBootstrap | 技能逻辑已实施，图标待提示词确认与生成，待 IDE/Web 联机验收 |
+| 0.2.33 | 2026-07-17 | 修正技能 3 美术提示词：新增中文 `ART-PROMPT-UI-0008 v2`，保留英文 v1 历史并要求重新确认；未调用生成接口，暂不替换技能图标 | docs/art-prompts.md、docs/art-assets-register.md | 已修正，待用户确认 v2 |
+| 0.2.34 | 2026-07-17 | 修正死亡翻滚旋转轴：由 Z 轴 2D 旋转改为角色局部 X 轴旋转，保持服务器坐标与水平朝向不变 | Player、远端动作表现、需求档案与回归测试 | 已实施，待 IDE/Web 视觉验收 |
+| 0.2.35 | 2026-07-17 | 将鱼 Sprite 拆到独立 FishVisual 子节点，根节点只同步世界位置；死亡翻滚不再可能被根节点 2D 角度或网络朝向覆盖 | Player、RoleManager、远端动作表现 | 已实施，待 IDE/Web 视觉验收 |
+| 0.2.36 | 2026-07-17 | 新增技能 4“大王喷墨”：16 方向黑墨柱、固定释放点、0.5 秒喷洒与 0.5 秒延迟扩散，服务器按 10 米范围结算 25 点伤害 | 技能配置、CombatService、Room、SkillEffectExecutor、GameBootstrap、网络协议 | 逻辑已实施，图标待提示词确认与生成 |
+| 0.2.37 | 2026-07-17 | 完成 `ART-PROMPT-UI-0009 v1` 中文提示词确认、调用和正式技能图标接入 | art-prompts、art-assets-register、技能 4 配置与 Cocos 资源 | 已实施，待 IDE/Web 视觉与联机验收 |
+| 0.2.38 | 2026-07-17 | 修正大王喷墨表现：移除长方形墨柱，改为 16 路不规则墨团、散落墨滴和中心墨云的泼洒效果 | GameBootstrap、需求档案 | 已实施，待 IDE/Web 视觉验收 |

@@ -98,6 +98,36 @@ test('MainUIManager owns fixed large-world HUD node creation', () => {
   assert.match(mainUi, /new SkillActionPanel\(this\.inputLayer/);
 });
 
+test('技能 3 使用独立死亡翻滚配置和网络 ID', () => {
+  const config = readFileSync(fromRoot('assets/resources/configs/skill-placeholder-3.json'), 'utf8');
+  const inkConfig = readFileSync(fromRoot('assets/resources/configs/skill-placeholder-4.json'), 'utf8');
+  const protocol = readFileSync(fromRoot('assets/scripts/network/NetworkProtocol.ts'), 'utf8');
+  const combat = readFileSync(fromRoot('server/src/combat/combat-config.ts'), 'utf8');
+  assert.match(config, /"id": "skill-death-roll"/);
+  assert.match(config, /"animationState": "deathRoll"/);
+  assert.match(config, /"damage": 3/);
+  assert.match(protocol, /'skill-death-roll'/);
+  assert.match(combat, /'skill-death-roll': \{ damage: 3/);
+  assert.match(inkConfig, /"id": "skill-ink-splash"/);
+  assert.match(protocol, /'skill-ink-splash'/);
+  assert.match(combat, /'skill-ink-splash': \{ damage: 25, range: 600/);
+});
+
+test('死亡翻滚使用局部 X 轴而不是 2D Z 轴角度', () => {
+  const player = readFileSync(join(root, 'assets', 'scripts', 'cocos', 'Player.ts'), 'utf8');
+  assert.match(player, /setRotationFromEuler\(this\.visualRollAngleX, 0, 0\)/);
+  assert.match(player, /this\.visualRollAngleX = end \* progress/);
+  assert.doesNotMatch(player, /node\.angle = this\.visual/);
+});
+
+test('大王喷墨使用泼洒墨团而不是长方形墨柱', () => {
+  const bootstrap = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const effect = bootstrap.slice(bootstrap.indexOf('private createInkSplashEffect'), bootstrap.indexOf('private bindActionButton'));
+  assert.match(effect, /drawBlob/);
+  assert.match(effect, /graphics\.circle/);
+  assert.doesNotMatch(effect, /graphics\.lineTo\(dx \* rayLength/);
+});
+
 test('RoleManager 统一创建和移除本地与远端玩家对象', () => {
   const bootstrap = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
   const roles = readFileSync(fromRoot('assets/scripts/cocos/RoleManager.ts'), 'utf8');
@@ -110,6 +140,8 @@ test('RoleManager 统一创建和移除本地与远端玩家对象', () => {
   assert.match(roles, /new LocalPlayer\(/);
   assert.match(roles, /new Player\(/);
   assert.match(player, /export class Player/);
+  assert.match(player, /private readonly visualNode: Node/);
+  assert.match(player, /visualNode\.setRotationFromEuler\(this\.visualRollAngleX, 0, 0\)/);
   assert.match(player, /setHealth\(health: number, maxHealth: number\)/);
   assert.match(player, /setFacing\(angle: number/);
   assert.match(local, /export class LocalPlayer extends Player/);

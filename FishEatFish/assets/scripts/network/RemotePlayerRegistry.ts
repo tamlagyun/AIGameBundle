@@ -5,6 +5,7 @@ export interface RemotePlayerView {
   setHealth?(health: number, maxHealth: number): void;
   playSkill?(skillId: SkillId, effectDurationMs?: number): void;
   playWhaleTarget?(effectDurationMs?: number): void;
+  playDeathRollTarget?(effectDurationMs?: number): void;
   playHurt?(skillId: string): void;
   playDeath?(): void;
   playRespawn?(): void;
@@ -14,6 +15,7 @@ export class RemotePlayerRegistry {
   private readonly views = new Map<string, RemotePlayerView>();
   private readonly actionSequences = new Map<string, number>();
   private readonly pendingWhaleTargets = new Map<string, number>();
+  private readonly pendingDeathRollTargets = new Map<string, number>();
   private readonly create: (state: RemotePlayerState) => RemotePlayerView;
   constructor(create: (state: RemotePlayerState) => RemotePlayerView) { this.create = create; }
   upsert(state: RemotePlayerState) {
@@ -30,6 +32,11 @@ export class RemotePlayerRegistry {
       view.playWhaleTarget?.(pendingDuration);
       this.pendingWhaleTargets.delete(state.playerId);
     }
+    const pendingRollDuration = this.pendingDeathRollTargets.get(state.playerId);
+    if (pendingRollDuration !== undefined) {
+      view.playDeathRollTarget?.(pendingRollDuration);
+      this.pendingDeathRollTargets.delete(state.playerId);
+    }
     if (state.dead) view.playDeath?.();
   }
   setTransform(playerId: string, x: number, y: number, rotation: number) {
@@ -42,17 +49,21 @@ export class RemotePlayerRegistry {
     if (actionSequence !== undefined && actionSequence <= (this.actionSequences.get(playerId) ?? 0)) return;
     if (actionSequence !== undefined) this.actionSequences.set(playerId, actionSequence);
     this.views.get(playerId)?.playSkill?.(skillId, effectDurationMs);
-    if (skillId === 'skill-whale-swallow' && targetId) {
+    if ((skillId === 'skill-whale-swallow' || skillId === 'skill-death-roll') && targetId) {
       const target = this.views.get(targetId);
-      if (target) target.playWhaleTarget?.(effectDurationMs);
+      if (skillId === 'skill-death-roll') {
+        if (target) target.playDeathRollTarget?.(effectDurationMs);
+        else this.pendingDeathRollTargets.set(targetId, effectDurationMs);
+      } else if (target) target.playWhaleTarget?.(effectDurationMs);
       else this.pendingWhaleTargets.set(targetId, effectDurationMs);
     }
   }
   playWhaleTarget(playerId: string, effectDurationMs = 3000) { this.views.get(playerId)?.playWhaleTarget?.(effectDurationMs); }
+  playDeathRollTarget(playerId: string, effectDurationMs = 1150) { this.views.get(playerId)?.playDeathRollTarget?.(effectDurationMs); }
   playHurt(playerId: string, skillId: string) { this.views.get(playerId)?.playHurt?.(skillId); }
   playDeath(playerId: string) { this.views.get(playerId)?.playDeath?.(); }
   playRespawn(playerId: string) { this.views.get(playerId)?.playRespawn?.(); }
-  remove(playerId: string) { this.views.get(playerId)?.destroy(); this.views.delete(playerId); this.actionSequences.delete(playerId); this.pendingWhaleTargets.delete(playerId); }
+  remove(playerId: string) { this.views.get(playerId)?.destroy(); this.views.delete(playerId); this.actionSequences.delete(playerId); this.pendingWhaleTargets.delete(playerId); this.pendingDeathRollTargets.delete(playerId); }
   ids(): string[] { return [...this.views.keys()]; }
-  clear() { for (const view of this.views.values()) view.destroy(); this.views.clear(); this.actionSequences.clear(); this.pendingWhaleTargets.clear(); }
+  clear() { for (const view of this.views.values()) view.destroy(); this.views.clear(); this.actionSequences.clear(); this.pendingWhaleTargets.clear(); this.pendingDeathRollTargets.clear(); }
 }

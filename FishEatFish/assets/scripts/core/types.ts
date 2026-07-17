@@ -30,7 +30,7 @@ export interface SkillConfig {
   id: string;
   displayName: string;
   networkSkillId: string;
-  animationState: 'bite' | 'dashBite' | 'whaleSwallow';
+  animationState: 'bite' | 'dashBite' | 'whaleSwallow' | 'deathRoll' | 'inkSplash';
   damage: number;
   range: number;
   cooldownSeconds: number;
@@ -43,13 +43,18 @@ export interface SkillConfig {
     cooldownGroup: string;
   };
   clientEffect: {
-    kind: 'bite' | 'dashBite' | 'whaleSwallow';
+    kind: 'bite' | 'dashBite' | 'whaleSwallow' | 'deathRoll' | 'inkSplash';
     animationDurationSeconds: number;
     visualOffset: number;
     visualRadius: number;
     visualDurationSeconds: number;
     visualColor: { r: number; g: number; b: number; a: number };
     hint: string;
+    rayCount?: number;
+    rayLength?: number;
+    sprayDurationSeconds?: number;
+    expansionDelaySeconds?: number;
+    expansionDurationSeconds?: number;
   };
   effectDurationSeconds?: number;
   scaleMultiplier?: number;

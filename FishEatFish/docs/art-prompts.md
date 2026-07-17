@@ -76,6 +76,16 @@
 - 调用日期：未调用
 - 输出文件：无
 - 最终选定：无
+
+### ART-PROMPT-UI-0009 v1 生成记录
+
+- 状态：已确认并调用，已生成并选定
+- 用户确认日期：2026-07-17
+- 调用日期：2026-07-17
+- 源图：`C:/Users/Administrator/.codex/generated_images/019f5a9b-2560-7341-a563-08fd8c7602d8/exec-89d8317c-30a6-491a-8a93-21cef0229657.png`
+- 加工步骤：使用 `remove_chroma_key.py` 去除纯绿色背景并保留透明通道；统一缩放为 1024×1024；完成透明边缘目检
+- 最终资源：`assets/resources/art/ui/skill-ink-splash.png`
+- 调用结果：生成深海蓝圆形技能按钮，中心为 16 方向黑墨放射效果，无文字、无水印、无鱼身和血腥元素，已接入技能 4 配置
 - 上一版本：`ART-PROMPT-0001 v2`
 - 修改原因：v2 未能消除侧视透视，进一步强化 90° 垂直俯视、单一海床平面和地图贴图语义
 
@@ -440,3 +450,50 @@
 - 最终选定：无
 - 上一版本：`ART-PROMPT-UI-0007 v1`
 - 修改原因：v1 出现牙齿；v2 改为纯抽象吞吸漩涡，禁止生成任何生物嘴部或器官。
+## ART-PROMPT-UI-0008 v1
+
+- 状态：待用户确认，尚未调用模型
+- 用途：`skill-death-roll` 技能 3“死亡翻滚”按钮图标
+- 模型：项目通用图像生成接口（内置 imagegen 路径）
+- 尺寸/数量：1024×1024，1 张
+- 完整提示词：`Use case: stylized-concept; Asset type: mobile game skill icon; Primary request: a polished cartoon ocean-game skill icon for “死亡翻滚”, showing a cute golden crucian fish clamping onto a blue carp and making one fast circular roll, dynamic spiral motion trails and small water splashes, readable at small size; Scene/backdrop: isolated icon composition; Subject: two complete friendly cartoon fish, no gore, no blood, no wounds, playful bite-and-spin action; Style/medium: colorful 2D game UI illustration, clean bold dark-blue outline, glossy aquatic highlights, professional production asset; Composition/framing: centered circular composition with generous padding, strong silhouette, action readable from one glance; Lighting/mood: bright energetic underwater lighting; Color palette: turquoise, ocean blue, warm golden orange, white highlights; Materials/textures: smooth polished game-icon rendering; Constraints: transparent-ready flat solid #00ff00 chroma-key background, no text, no watermark, preserve complete fish bodies; Avoid: realistic violence, blood, gore, torn flesh, scary expressions, extra fish, side-scene background, perspective distortion, cropped subject, SVG, vector-only output.`
+- 排除项：血腥、伤口、文字、水印、额外鱼、裁切、SVG、纯矢量
+- 输出目录：`assets/resources/art/ui/skill-death-roll.png`
+- 调用结果：未调用
+- 修改历史：v1 初版，等待确认；未经确认不得修改或调用
+## ART-PROMPT-UI-0008 v2
+
+- 状态：待用户确认，尚未调用模型
+- 变更：将 v1 英文提示词改为中文，保留需求、构图和排除项，不覆盖历史版本
+- 用途：`skill-death-roll` 技能 3“死亡翻滚”按钮图标
+- 模型：项目通用图像生成接口（内置 imagegen 路径）
+- 尺寸/数量：1024×1024，1 张
+- 完整提示词：`用途：风格化概念；资源类型：移动游戏技能图标；主要要求：制作《鲫鱼吃鲤鱼》技能 3“死亡翻滚”的正式卡通海洋游戏技能按钮图标，画面表现一条可爱金黄色鲫鱼咬住一条蓝色鲤鱼并快速翻滚一整圈，带有清晰的环形旋转动势线和少量水花，缩小到按钮尺寸后仍能一眼读懂；背景：独立图标构图；主体：两条完整、友好的卡通鱼，不血腥、不流血、没有伤口，表现顽皮的咬住并旋转动作；风格：高品质 2D 游戏 UI 插画，干净的深蓝粗描边，水润高光，正式可用资源质量；构图：主体居中，圆形动势构图，四周保留充足安全边距，轮廓清晰，不裁切；光照与氛围：明亮、活泼的水下光照；颜色：青绿色、海洋蓝、暖金橙色、白色高光；材质：平滑精致的卡通游戏渲染；约束：使用纯色 #00ff00 抠图背景，背景必须完全平整，不要阴影、渐变、纹理或反光；鱼身必须完整；不要文字、不要水印；排除：写实暴力、血液、血腥、撕裂、伤口、恐怖表情、额外鱼、侧面场景背景、透视变形、裁切主体、SVG、纯矢量输出。`
+- 排除项：血腥、伤口、文字、水印、额外鱼、裁切、SVG、纯矢量、复杂场景背景
+- 输出目录：`assets/resources/art/ui/skill-death-roll.png`
+- 调用结果：未调用
+- 修改历史：v2 将提示词完整改为中文；必须重新确认后才能调用
+
+### ART-PROMPT-UI-0008 v2 生成记录
+
+- 状态：已确认并调用，已生成并选定
+- 用户确认：2026-07-17
+- 调用日期：2026-07-17
+- 源图：`C:/Users/Administrator/.codex/generated_images/019f5a9b-2560-7341-a563-08fd8c7602d8/exec-ca5e09f4-d0e5-4845-8ef6-05007d09908f.png`
+- 加工步骤：使用 `remove_chroma_key.py` 去除纯绿色背景并保留透明通道；统一缩放为 1024×1024；完成透明边缘目检
+- 最终资源：`assets/resources/art/ui/skill-death-roll.png`
+- 调用结果：生成一张无血腥、无文字、无水印的死亡翻滚技能图标，已接入技能 3 配置
+
+## ART-PROMPT-UI-0009 v1
+
+- 状态：待用户确认，尚未调用模型
+- 用途：`skill-ink-splash` 技能 4“大王喷墨”按钮图标
+- 模型：`jimeng_t2i_v40`
+- 尺寸/数量：1024×1024，1 张
+- 输出目录：`FishEatFish/art-output/ART-PROMPT-UI-0009-v1`
+- 完整提示词：`用途：风格化概念；资源类型：移动游戏技能按钮图标；主要要求：制作《鲫鱼吃鲤鱼》技能 4“大王喷墨”的正式卡通海洋游戏 UI 图标，表现一团深黑蓝色墨汁从中心向 16 个等角方向喷射，形成 16 条清晰、粗细适中的放射状黑墨柱和少量墨滴，缩小到按钮尺寸后仍能一眼读懂“向周围喷墨攻击”的技能含义；构图：单个圆形技能按钮，主体居中，16 条墨柱均匀分布，四周保留充足安全边距，轮廓完整，不裁切；风格：高品质 2D 游戏 UI 插画，深海蓝与青绿色外圈，圆润玻璃质感，深蓝粗描边，明亮水下高光，正式可用资源质量；颜色：黑墨、深海蓝、青绿色、少量紫蓝能量高光、白色水润高光；背景：独立图标构图；约束：使用纯色 #00ff00 抠图背景，背景必须完全平整，不要阴影、渐变、纹理或反光；按钮图形本身不得使用纯绿色；不要文字、数字、logo、水印；排除：写实污染、血腥、血液、恐怖、鱼身、动物脸、嘴巴、牙齿、人物、场景背景、海底地图、水面、透视变形、侧斜视角、多个按钮、裁切主体、SVG、纯矢量输出。`
+- 排除项：血腥、血液、恐怖、鱼身、动物脸、场景背景、文字、水印、SVG、纯矢量
+- 用户确认日期：待确认
+- 调用日期：未调用
+- 输出文件：无
+- 最终选定：无

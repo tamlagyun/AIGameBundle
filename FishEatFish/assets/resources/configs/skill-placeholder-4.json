@@ -1,27 +1,32 @@
 {
   "schemaVersion": 2,
-  "id": "skill-placeholder-4",
-  "displayName": "技能4",
-  "networkSkillId": "skill-dash-bite",
-  "animationState": "dashBite",
-  "damage": 30,
-  "range": 96,
-  "cooldownSeconds": 5,
-  "dashDistance": 240,
+  "id": "skill-ink-splash",
+  "displayName": "大王喷墨",
+  "networkSkillId": "skill-ink-splash",
+  "animationState": "inkSplash",
+  "damage": 25,
+  "range": 600,
+  "cooldownSeconds": 10,
+  "dashDistance": 0,
   "ui": {
-    "nodeName": "SkillPlaceholderButton4",
+    "nodeName": "SkillInkSplashButton",
     "slot": "arc",
     "slotIndex": 3,
-    "iconPath": "art/ui/skill-dash",
-    "cooldownGroup": "dash"
+    "iconPath": "art/ui/skill-ink-splash",
+    "cooldownGroup": "ink-splash"
   },
   "clientEffect": {
-    "kind": "dashBite",
-    "animationDurationSeconds": 0.42,
-    "visualOffset": 84,
-    "visualRadius": 96,
-    "visualDurationSeconds": 0.22,
-    "visualColor": { "r": 120, "g": 230, "b": 255, "a": 235 },
-    "hint": "技能4：暂用冲刺撕咬效果"
+    "kind": "inkSplash",
+    "animationDurationSeconds": 1,
+    "visualOffset": 0,
+    "visualRadius": 600,
+    "visualDurationSeconds": 1,
+    "visualColor": { "r": 12, "g": 18, "b": 24, "a": 220 },
+    "rayCount": 16,
+    "rayLength": 600,
+    "sprayDurationSeconds": 0.5,
+    "expansionDelaySeconds": 0.5,
+    "expansionDurationSeconds": 0.5,
+    "hint": "大王喷墨：向 16 个方向喷出黑墨，1 秒后攻击 10 米范围内的玩家"
   }
 }

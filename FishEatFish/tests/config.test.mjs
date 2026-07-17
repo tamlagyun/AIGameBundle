@@ -26,6 +26,18 @@ test('鱼、技能和世界样例配置可校验', () => {
   assert.equal(whale.opacity, 0.5);
   assert.equal(whale.ui.iconPath, 'art/ui/skill-whale-swallow');
   assert.equal(whale.clientEffect.visualRadius, 96);
+  const deathRoll = parseSkillConfig(readJson('skill-placeholder-3.json'));
+  assert.equal(deathRoll.id, 'skill-death-roll');
+  assert.equal(deathRoll.networkSkillId, 'skill-death-roll');
+  assert.equal(deathRoll.animationState, 'deathRoll');
+  assert.equal(deathRoll.damage, 3);
+  assert.equal(deathRoll.clientEffect.kind, 'deathRoll');
+  const inkSplash = parseSkillConfig(readJson('skill-placeholder-4.json'));
+  assert.equal(inkSplash.id, 'skill-ink-splash');
+  assert.equal(inkSplash.networkSkillId, 'skill-ink-splash');
+  assert.equal(inkSplash.animationState, 'inkSplash');
+  assert.equal(inkSplash.clientEffect.kind, 'inkSplash');
+  assert.equal(inkSplash.clientEffect.rayCount, 16);
   const loadout = parseSkillLoadoutConfig(readJson('skill-loadout-player.json'));
   assert.deepEqual(loadout.layout.arcAngles, [190, 155, 120, 85]);
   assert.equal(loadout.skillConfigPaths.length, 5);

@@ -8,13 +8,14 @@ import type { InputPayload, SkillPayload } from '../protocol/client-messages.js'
 import type { PlayerSession } from './player-session.js';
 import { createCombatState } from '../combat/combat-state.js';
 import { CombatService } from '../combat/combat-service.js';
-import { WHALE_SWALLOW_DURATION_MS } from '../combat/combat-config.js';
+import { DEATH_ROLL_DURATION_MS, INK_SPLASH_DURATION_MS, WHALE_SWALLOW_DURATION_MS } from '../combat/combat-config.js';
 import { clampPosition } from '../simulation/bounds-system.js';
 
 export class Room {
   readonly id = randomUUID();
   private tickCount = 0;
   private readonly players = new Map<string, PlayerSession>();
+  private readonly pendingInkSplashes: Array<{ sourceId: string; centerX: number; centerY: number; dueAt: number }> = [];
   private readonly combat = new CombatService();
   constructor(private readonly config: ServerConfig) {}
   get size() { return this.players.size; }
@@ -25,7 +26,7 @@ export class Room {
     this.broadcast(message('playerJoined', this.playerSnapshot(player)));
     return player;
   }
-  remove(playerId: string) { this.players.delete(playerId); this.broadcast(message('playerRemoved', { playerId })); }
+  remove(playerId: string) { this.players.delete(playerId); for (let index = this.pendingInkSplashes.length - 1; index >= 0; index -= 1) if (this.pendingInkSplashes[index]?.sourceId === playerId) this.pendingInkSplashes.splice(index, 1); this.broadcast(message('playerRemoved', { playerId })); }
   input(playerId: string, input: InputPayload) {
     const player = this.players.get(playerId);
     if (!player) throw new Error('PLAYER_NOT_IN_ROOM');
@@ -64,7 +65,9 @@ export class Room {
       source.activeTargetId = result.targetId;
       const effectDurationMs = skill.skillId === 'skill-whale-swallow'
         ? WHALE_SWALLOW_DURATION_MS
-        : skill.skillId === 'skill-dash-bite' ? 420 : 340;
+        : skill.skillId === 'skill-death-roll' ? DEATH_ROLL_DURATION_MS
+          : skill.skillId === 'skill-ink-splash' ? INK_SPLASH_DURATION_MS
+          : skill.skillId === 'skill-dash-bite' ? 420 : 340;
       source.actionUntil = now + effectDurationMs;
       this.broadcast(message('skillEffect', {
         playerId,
@@ -78,6 +81,7 @@ export class Room {
         effectDurationMs,
         serverTick: this.tickCount
       }));
+      if (skill.skillId === 'skill-ink-splash') this.pendingInkSplashes.push({ sourceId: playerId, centerX: source.x, centerY: source.y, dueAt: now + INK_SPLASH_DURATION_MS });
     }
     this.sendTo(source, message('skillResolved', { playerId, skillId: skill.skillId, hitCount: result.hitCount, reason: result.reason, serverTick: this.tickCount }));
     for (const event of result.events) this.broadcast(message(event.type, event.payload));
@@ -85,6 +89,15 @@ export class Room {
   tick() {
     this.tickCount += 1;
     const now = Date.now();
+    for (let index = this.pendingInkSplashes.length - 1; index >= 0; index -= 1) {
+      const pending = this.pendingInkSplashes[index];
+      if (!pending || pending.dueAt > now) continue;
+      this.pendingInkSplashes.splice(index, 1);
+      const source = this.players.get(pending.sourceId);
+      if (!source) continue;
+      const events = this.combat.resolveInkSplash(source, pending.centerX, pending.centerY, [...this.players.values()], now, this.tickCount);
+      for (const event of events) this.broadcast(message(event.type, event.payload));
+    }
     for (const player of this.players.values()) {
       const respawn = this.combat.respawn(player, now, (Math.random() - 0.5) * 400, (Math.random() - 0.5) * 240, this.tickCount);
       if (respawn) this.broadcast(message(respawn.type, respawn.payload));

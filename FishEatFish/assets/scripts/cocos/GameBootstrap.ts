@@ -84,7 +84,7 @@ export class GameBootstrap extends Component {
   private localActionSequence = 0;
   private swimFrameIndex = 0;
   private animationElapsed = 0;
-  private fishActionState: 'swim' | 'bite' | 'dashBite' | 'whaleSwallow' | 'hurt' = 'swim';
+  private fishActionState: 'swim' | 'bite' | 'dashBite' | 'whaleSwallow' | 'deathRoll' | 'inkSplash' | 'hurt' = 'swim';
   private fishActionElapsed = 0;
   private fishActionDuration = 0;
   private readonly pressedKeys = new Set<KeyCode>();
@@ -274,8 +274,21 @@ export class GameBootstrap extends Component {
         if (!skill) return;
         const actionDuration = skill.clientEffect.animationDurationSeconds;
         const radians = role.facingAngle * Math.PI / 180;
+        if (skill.clientEffect.kind === 'inkSplash') {
+          this.createInkSplashEffect(
+            node.position.x,
+            node.position.y,
+            skill.clientEffect.visualRadius,
+            skill.clientEffect.rayCount ?? 16,
+            skill.clientEffect.rayLength ?? skill.clientEffect.visualRadius,
+            new Color(skill.clientEffect.visualColor.r, skill.clientEffect.visualColor.g, skill.clientEffect.visualColor.b, skill.clientEffect.visualColor.a),
+            skill.clientEffect.sprayDurationSeconds ?? 0.5,
+            skill.clientEffect.expansionDelaySeconds ?? 0.5,
+            skill.clientEffect.expansionDurationSeconds ?? 0.5
+          );
+        }
         if (skill.clientEffect.kind === 'dashBite') this.createDashEffect(node.position.x, node.position.y, role.facingAngle);
-        this.createBiteEffect(
+        if (skill.clientEffect.kind !== 'inkSplash') this.createBiteEffect(
           node.position.x + Math.cos(radians) * skill.clientEffect.visualOffset,
           node.position.y,
           role.facingAngle,
@@ -284,6 +297,7 @@ export class GameBootstrap extends Component {
           skill.clientEffect.visualDurationSeconds
         );
         this.playRemoteFishAnimation(sprite, this.biteFrames, actionDuration);
+        if (skill.clientEffect.kind === 'deathRoll') role.startVisualRoll(actionDuration);
         if (skill.clientEffect.kind === 'whaleSwallow') {
           this.applyWhaleSourceVisual(
             role,
@@ -295,6 +309,7 @@ export class GameBootstrap extends Component {
       playWhaleTarget: (effectDurationMs?: number) => {
         this.applyWhaleOpacity(role, effectDurationMs ?? this.getWhaleEffectDurationMs());
       },
+      playDeathRollTarget: (effectDurationMs?: number) => role.startVisualRoll((effectDurationMs ?? 1150) / 1000),
       playHurt: (skillId: string) => {
         const duration = this.getConfiguredNetworkSkill(skillId)?.clientEffect.animationDurationSeconds ?? 0.34;
         this.playRemoteFishAnimation(sprite, this.hurtFrames, duration);
@@ -538,9 +553,16 @@ export class GameBootstrap extends Component {
     } else if (message.type === 'skillEffect') {
       const effect = message.payload as SkillEffect;
       if (this.isWhaleSwallowNetworkSkill(effect.skillId)) this.handleWhaleSwallowEffect(effect);
-      else if (effect.playerId !== this.networkPlayerId) {
+      else if (effect.playerId === this.networkPlayerId) {
+        if (this.getConfiguredNetworkSkill(effect.skillId)?.clientEffect.kind === 'deathRoll' && effect.targetId) {
+          this.remotePlayers?.playDeathRollTarget(effect.targetId, effect.effectDurationMs ?? 1150);
+        }
+      } else {
         this.remotePlayers?.setTransform(effect.playerId, effect.x, effect.y, effect.rotation);
-        this.remotePlayers?.playSkill(effect.playerId, effect.skillId, effect.actionSequence);
+        this.remotePlayers?.playSkill(effect.playerId, effect.skillId, effect.actionSequence, effect.targetId, effect.effectDurationMs ?? 1150);
+        if (this.getConfiguredNetworkSkill(effect.skillId)?.clientEffect.kind === 'deathRoll' && effect.targetId === this.networkPlayerId) {
+          this.localPlayer?.startVisualRoll((effect.effectDurationMs ?? 1150) / 1000);
+        }
       }
     } else if (message.type === 'skillResolved') {
       const result = message.payload as SkillResolved;
@@ -691,6 +713,8 @@ export class GameBootstrap extends Component {
       startAction: (state, duration) => this.startFishAction(state, duration),
       createBiteEffect: (x, y, angle, radius, color, duration) => this.createBiteEffect(x, y, angle, radius, new Color(color.r, color.g, color.b, color.a), duration),
       createDashEffect: (x, y, angle) => this.createDashEffect(x, y, angle),
+      startVisualRoll: (duration) => this.localPlayer?.startVisualRoll(duration),
+      createInkSplashEffect: (x, y, radius, rayCount, rayLength, color, sprayDuration, expansionDelay, expansionDuration) => this.createInkSplashEffect(x, y, radius, rayCount, rayLength, new Color(color.r, color.g, color.b, color.a), sprayDuration, expansionDelay, expansionDuration),
       moveDash: (distance, angle) => this.moveDash(distance, angle),
       sendSkill: (networkSkillId) => this.sendSkillEvent(networkSkillId),
       showHint: (text) => { if (this.actionHint) this.actionHint.string = text; }
@@ -727,7 +751,7 @@ export class GameBootstrap extends Component {
     this.realtime.sendSkill({ skillId: skillId as SkillId, clientTick: ++this.networkClientTick, x: position.x, y: position.y, rotation: player.facingAngle });
   }
 
-  private startFishAction(state: 'bite' | 'dashBite' | 'whaleSwallow' | 'hurt', duration: number): void {
+  private startFishAction(state: 'bite' | 'dashBite' | 'whaleSwallow' | 'deathRoll' | 'inkSplash' | 'hurt', duration: number): void {
     this.fishActionState = state;
     this.fishActionElapsed = 0;
     this.fishActionDuration = duration;
@@ -780,6 +804,73 @@ export class GameBootstrap extends Component {
     node.setPosition(x, y, 0);
     node.angle = angle;
     tween(node).to(0.3, { scale: new Vec3(1.5, 0.55, 1) }).call(() => node.destroy()).start();
+  }
+
+  /** 在固定释放点生成 16 路泼洒墨团：喷洒 0.5 秒，停顿 0.5 秒后快速扩散。 */
+  private createInkSplashEffect(x: number, y: number, radius: number, rayCount: number, rayLength: number, color: Color, sprayDuration: number, expansionDelay: number, expansionDuration: number): void {
+    const node = new Node('InkSplashEffect');
+    node.layer = this.node.layer;
+    const transform = node.addComponent(UITransform);
+    transform.setContentSize(rayLength * 2 + 40, rayLength * 2 + 40);
+    const graphics = node.addComponent(Graphics);
+    graphics.fillColor = color;
+    const count = Math.max(1, Math.floor(rayCount));
+    // 使用不规则墨团与散落墨滴组成泼洒路径，避免长方形柱状表现。
+    const drawBlob = (cx: number, cy: number, blobRadius: number, seed: number): void => {
+      const points = 9;
+      for (let point = 0; point < points; point += 1) {
+        const angle = point * Math.PI * 2 / points;
+        const wobble = 0.76 + ((seed * 13 + point * 7) % 11) / 22;
+        const px = cx + Math.cos(angle) * blobRadius * wobble;
+        const py = cy + Math.sin(angle) * blobRadius * wobble;
+        if (point === 0) graphics.moveTo(px, py); else graphics.lineTo(px, py);
+      }
+      graphics.close();
+      graphics.fill();
+    };
+    for (let index = 0; index < count; index += 1) {
+      const angle = index * Math.PI * 2 / count;
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      const sideX = -dy;
+      const sideY = dx;
+      const segmentCount = 6;
+      for (let segment = 0; segment < segmentCount; segment += 1) {
+        const progress = (segment + 1) / segmentCount;
+        const distance = rayLength * (0.12 + progress * 0.84);
+        const wobble = (((index + 3) * (segment + 5)) % 9 - 4) * rayLength * 0.006;
+        const cx = dx * distance + sideX * wobble;
+        const cy = dy * distance + sideY * wobble;
+        const blobRadius = Math.max(7, rayLength * (0.047 - progress * 0.026));
+        drawBlob(cx, cy, blobRadius, index * 17 + segment);
+        if (segment > 0 && segment < segmentCount - 1) {
+          const dropSide = segment % 2 === 0 ? 1 : -1;
+          const dropDistance = distance + rayLength * 0.025;
+          graphics.circle(
+            dx * dropDistance + sideX * dropSide * blobRadius * 2.1,
+            dy * dropDistance + sideY * dropSide * blobRadius * 2.1,
+            Math.max(4, blobRadius * 0.32)
+          );
+          graphics.fill();
+        }
+      }
+    }
+    drawBlob(0, 0, Math.max(28, radius * 0.08), 97);
+    for (let drop = 0; drop < 12; drop += 1) {
+      const dropAngle = drop * Math.PI * 2 / 12 + 0.12;
+      const dropDistance = radius * (0.14 + (drop % 4) * 0.035);
+      graphics.circle(Math.cos(dropAngle) * dropDistance, Math.sin(dropAngle) * dropDistance, Math.max(5, radius * (0.012 + (drop % 3) * 0.004)));
+      graphics.fill();
+    }
+    this.node.getChildByName('WorldRoot')?.addChild(node);
+    node.setPosition(x, y, 0);
+    node.setScale(0.05, 0.05, 1);
+    tween(node)
+      .to(Math.max(0.05, sprayDuration), { scale: new Vec3(1, 1, 1) })
+      .delay(Math.max(0, expansionDelay))
+      .to(Math.max(0.05, expansionDuration), { scale: new Vec3(1.32, 1.32, 1) })
+      .call(() => node.destroy())
+      .start();
   }
 
   private bindActionButton(node: Node, action: () => void): void {

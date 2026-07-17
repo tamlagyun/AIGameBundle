@@ -37,6 +37,8 @@ const required = [
   'assets/resources/configs/world-sea-001.json',
   'assets/resources/art/map/sea-background.png',
   'assets/resources/art/ui/skill-whale-swallow.png',
+  'assets/resources/art/ui/skill-ink-splash.png',
+  'assets/resources/art/ui/skill-death-roll.png',
   'assets/resources/art/characters/player/swim-0.png',
   'assets/resources/art/characters/player/swim-5.png',
   'assets/resources/art/characters/player/hurt-0.png',
