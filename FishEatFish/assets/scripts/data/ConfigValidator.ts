@@ -1,4 +1,4 @@
-import { CONFIG_SCHEMA_VERSION, type FishConfig, type SkillConfig, type SkillLibraryConfig, type SkillLoadoutConfig, type WorldConfig } from '../core/types.ts';
+import { CONFIG_SCHEMA_VERSION, type AppearanceLibraryConfig, type FishConfig, type PlayerAppearanceConfig, type SkillConfig, type SkillLibraryConfig, type SkillLoadoutConfig, type WorldConfig } from '../core/types.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -109,6 +109,40 @@ export const parseSkillLibraryConfig = (value: unknown): SkillLibraryConfig => {
     throw new Error('skill library skillConfigPaths must not contain duplicates');
   }
   return config as unknown as SkillLibraryConfig;
+};
+
+export const parsePlayerAppearanceConfig = (value: unknown): PlayerAppearanceConfig => {
+  const config = requireBase(value, 'player appearance');
+  if (typeof config.displayName !== 'string' || config.displayName.length === 0) throw new Error('player appearance displayName is required');
+  if (typeof config.portraitPath !== 'string' || config.portraitPath.length === 0) throw new Error('player appearance portraitPath is required');
+  if (typeof config.resourceRoot !== 'string' || config.resourceRoot.length === 0) throw new Error('player appearance resourceRoot is required');
+  if (config.artFacingDirection !== 'left' && config.artFacingDirection !== 'right') throw new Error('player appearance artFacingDirection must be left or right');
+  if (!isRecord(config.animationArtFacingDirections)) throw new Error('player appearance animationArtFacingDirections must be an object');
+  for (const state of ['swim', 'attack', 'hurt']) {
+    const direction = config.animationArtFacingDirections[state];
+    if (direction !== 'left' && direction !== 'right') throw new Error(`player appearance animationArtFacingDirections.${state} must be left or right`);
+  }
+  if (!isRecord(config.animationPrefixes)) throw new Error('player appearance animationPrefixes must be an object');
+  for (const state of ['swim', 'attack', 'hurt']) {
+    if (typeof config.animationPrefixes[state] !== 'string' || config.animationPrefixes[state].length === 0) throw new Error(`player appearance animationPrefixes.${state} is required`);
+  }
+  for (const key of ['swimFrameCount', 'attackFrameCount', 'hurtFrameCount']) {
+    requirePositive(config[key], `player appearance ${key}`);
+    if (!Number.isInteger(config[key])) throw new Error(`player appearance ${key} must be an integer`);
+  }
+  requirePositive(config.swimFrameDurationSeconds, 'player appearance swimFrameDurationSeconds');
+  if (config.swimFrameDurationSeconds > 1) throw new Error('player appearance swimFrameDurationSeconds must not exceed 1');
+  return config as unknown as PlayerAppearanceConfig;
+};
+
+export const parseAppearanceLibraryConfig = (value: unknown): AppearanceLibraryConfig => {
+  const config = requireBase(value, 'appearance library');
+  if (typeof config.defaultAppearanceId !== 'string' || config.defaultAppearanceId.length === 0) throw new Error('appearance library defaultAppearanceId is required');
+  if (!Array.isArray(config.appearanceConfigPaths) || config.appearanceConfigPaths.length === 0 || config.appearanceConfigPaths.some((path) => typeof path !== 'string' || path.length === 0)) {
+    throw new Error('appearance library appearanceConfigPaths must be a non-empty string array');
+  }
+  if (new Set(config.appearanceConfigPaths).size !== config.appearanceConfigPaths.length) throw new Error('appearance library appearanceConfigPaths must not contain duplicates');
+  return config as unknown as AppearanceLibraryConfig;
 };
 
 export const parseWorldConfig = (value: unknown): WorldConfig => {

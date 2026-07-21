@@ -88,6 +88,36 @@ export interface SkillLibraryConfig {
   skillConfigPaths: string[];
 }
 
+export interface PlayerAppearanceConfig {
+  schemaVersion: 2;
+  id: string;
+  displayName: string;
+  portraitPath: string;
+  resourceRoot: string;
+  artFacingDirection: ArtFacingDirection;
+  animationArtFacingDirections: {
+    swim: ArtFacingDirection;
+    attack: ArtFacingDirection;
+    hurt: ArtFacingDirection;
+  };
+  animationPrefixes: {
+    swim: string;
+    attack: string;
+    hurt: string;
+  };
+  swimFrameCount: number;
+  swimFrameDurationSeconds: number;
+  attackFrameCount: number;
+  hurtFrameCount: number;
+}
+
+export interface AppearanceLibraryConfig {
+  schemaVersion: 2;
+  id: string;
+  defaultAppearanceId: string;
+  appearanceConfigPaths: string[];
+}
+
 export interface WorldConfig {
   schemaVersion: 2;
   id: string;

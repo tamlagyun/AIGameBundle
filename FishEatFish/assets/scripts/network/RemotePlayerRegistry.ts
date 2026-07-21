@@ -1,7 +1,8 @@
-import type { RemotePlayerState, SkillId } from './NetworkProtocol.ts';
+import type { AppearanceId, RemotePlayerState, SkillId } from './NetworkProtocol.ts';
 export interface RemotePlayerView {
   setPosition(x: number, y: number): void;
   setRotation(angle: number): void;
+  setAppearance?(appearanceId: AppearanceId): void;
   setHealth?(health: number, maxHealth: number): void;
   playSkill?(skillId: SkillId, effectDurationMs?: number): void;
   playWhaleTarget?(effectDurationMs?: number): void;
@@ -24,6 +25,7 @@ export class RemotePlayerRegistry {
     this.views.set(state.playerId, view);
     view.setPosition(state.x, state.y);
     view.setRotation(state.rotation);
+    view.setAppearance?.(state.appearanceId);
     view.setHealth?.(state.health, state.maxHealth);
     if (state.action && state.actionSequence !== undefined && state.actionSequence > (this.actionSequences.get(state.playerId) ?? 0)) {
       this.playSkill(state.playerId, state.action, state.actionSequence, state.actionTargetId, state.actionRemainingMs);
@@ -46,6 +48,7 @@ export class RemotePlayerRegistry {
     view?.setRotation(rotation);
   }
   setHealth(playerId: string, health: number, maxHealth: number) { this.views.get(playerId)?.setHealth?.(health, maxHealth); }
+  setAppearance(playerId: string, appearanceId: AppearanceId) { this.views.get(playerId)?.setAppearance?.(appearanceId); }
   playSkill(playerId: string, skillId: SkillId, actionSequence?: number, targetId?: string, effectDurationMs = 3000) {
     if (actionSequence !== undefined && actionSequence <= (this.actionSequences.get(playerId) ?? 0)) return;
     if (actionSequence !== undefined) this.actionSequences.set(playerId, actionSequence);

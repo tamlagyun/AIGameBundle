@@ -14,8 +14,9 @@
 - 当前“鲫鱼抢食”（稳定 ID 仍为 `skill-dash-bite`）占用 190° 的最左下第一个槽位；第二槽位为“鲸吞”，使用独立 PNG 位图；技能 3、4 依次占用其余槽位。技能图标替换只能发生在对应按钮的 SpriteFrame 来源，禁止调整 `ActionControlsRoot`、圆弧坐标、Widget、触摸区域、标签或冷却蒙板层级。
 - 普攻和技能名称叠放在对应图标内部下侧；标签采用底部中心锚点，标签下边缘与图标下边缘对齐，不得放到图标外侧。
 - 普通撕咬按钮和其它技能按钮只使用 `ActionControlsRoot` 内部局部坐标，不得分别对齐屏幕边缘。
-- `SkillLoadoutEntryRoot`：尺寸 104×116，作为图标、文字和触摸事件的单一复合根节点，通过 `Widget` 固定到 `InputLayer` 右边 28 px、上边 24 px；不得把入口图片与点击区域拆开。
+- `TopRightFeatureRoot`：作为右上功能入口的唯一整体容器，通过 `Widget` 固定到 `InputLayer` 右边 28 px、上边 24 px；内部的 `SkillLoadoutEntryRoot` 与 `TransformEntryRoot` 尺寸均为 104×116，左右排列并只使用容器局部坐标。不得给两个入口分别添加屏幕 Widget，也不得把入口图片、文字与点击区域拆开。
 - `SkillLoadoutDialog`：尺寸 1280×720、中心锚点、局部位置 `(0,0)`，直接挂在 `InputLayer` 并阻断下层输入；内部面板居中，1—4 号槽位和未装备技能列表只使用面板局部坐标。
+- `TransformDialog`：与技能弹窗同属 `InputLayer` 的 1280×720 模态层，展示当前形象和可选形态；选择“大王乌贼”后只替换角色表现资源，不改变玩家账号、位置、生命、等级或已装配技能。
 
 ## 交互约定
 
@@ -33,6 +34,8 @@
 - 技能配置入口打开后，先选择 1—4 号槽位，再点击未装备技能完成替换；已装备技能不进入候选列表，候选为空时显示明确提示，不得生成重复槽位。
 - 技能配置弹窗分页展示未装备技能，替换完成后同一帧刷新主技能栏和弹窗；入口与弹窗在 IDE、Web 使用同一 Cocos 节点树。
 - “虎鲸冲刺”属于首个非默认装配技能：启动时应出现在未装备技能列表，点击后替换当前选中的 1—4 号槽位；不得为它新增第五个主界面按钮或单独 Widget。
+- 变身入口与技能入口必须作为同一右上功能组左右排列；两者分别打开自己的模态弹窗，同一时间最多显示一个弹窗，弹窗显示时必须阻断摇杆、技能和地图触摸。
+- 角色形态选择必须配置驱动；本地选择后立即替换游动、技能攻击和受击动画，并通过服务端同步形态 ID，使同房间其他客户端使用同一套形态动画。
 
 ## 登录弹窗基线
 
@@ -79,5 +82,5 @@
 ## 大世界主 UI 管理边界
 
 - 大世界启动时创建固定 HUD 节点的入口统一为 `MainUIManager`。它负责取得并稳定化 `HudRoot/SafeAreaRoot/InputLayer`，并创建头顶信息承载层、提示与生命标签、完整摇杆根节点及 `SkillActionPanel`。
-- `SkillLoadoutEntryRoot`、`SkillLoadoutDialog` 和 `SkillActionPanel` 必须由同一个 `MainUIManager` 组织；技能入口右上对齐、技能栏右下对齐，两者只共享装配状态，不得共享或改写位置坐标。
+- `TopRightFeatureRoot`、`SkillLoadoutEntryRoot`、`TransformEntryRoot`、两个配置弹窗和 `SkillActionPanel` 必须由同一个 `MainUIManager` 组织；右上入口组和右下技能栏只共享必要状态，不得共享或改写位置坐标。
 - `GameBootstrap` 只能将资源、输入回调、技能激活回调和 UI 状态更新传给 `MainUIManager`，不得再次创建同名固定 HUD 节点或维护第二套坐标/Widget 逻辑。

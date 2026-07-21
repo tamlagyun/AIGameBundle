@@ -4,7 +4,7 @@ import { encode } from '../protocol/protocol-codec.js';
 import { message, type PlayerSnapshot, type RoomSnapshot } from '../protocol/server-messages.js';
 import { simulateMovement } from '../simulation/movement-system.js';
 import type { ServerConfig } from '../config/server-config.js';
-import type { InputPayload, SkillPayload } from '../protocol/client-messages.js';
+import type { AppearancePayload, InputPayload, SkillPayload } from '../protocol/client-messages.js';
 import type { PlayerSession } from './player-session.js';
 import { createCombatState } from '../combat/combat-state.js';
 import { CombatService } from '../combat/combat-service.js';
@@ -21,7 +21,7 @@ export class Room {
   get size() { return this.players.size; }
   add(accountId: string, displayName: string, socket: WebSocket) {
     if (this.size >= this.config.roomCapacity) throw new Error('ROOM_FULL');
-    const player: PlayerSession = { playerId: randomUUID(), accountId, displayName, socket, x: 0, y: 0, rotation: 0, lastInput: { clientTick: 0, moveX: 0, moveY: 0, rotation: 0 }, combat: createCombatState(), actionSequence: 0, actionUntil: 0 };
+    const player: PlayerSession = { playerId: randomUUID(), accountId, displayName, appearanceId: 'appearance-crucian', socket, x: 0, y: 0, rotation: 0, lastInput: { clientTick: 0, moveX: 0, moveY: 0, rotation: 0 }, combat: createCombatState(), actionSequence: 0, actionUntil: 0 };
     this.players.set(player.playerId, player);
     this.broadcast(message('playerJoined', this.playerSnapshot(player)));
     return player;
@@ -34,6 +34,12 @@ export class Room {
     player.lastInput = { ...input, rotation };
     // 输入与技能消息按 WebSocket 顺序到达；立即更新左右朝向，保证快速转向后攻击方向正确。
     player.rotation = rotation;
+  }
+  appearance(playerId: string, appearance: AppearancePayload) {
+    const player = this.players.get(playerId);
+    if (!player) throw new Error('PLAYER_NOT_IN_ROOM');
+    player.appearanceId = appearance.appearanceId;
+    this.broadcast(message('appearanceChanged', { playerId, appearanceId: player.appearanceId, serverTick: this.tickCount }));
   }
   skill(playerId: string, skill: SkillPayload) {
     const source = this.players.get(playerId);
@@ -129,6 +135,7 @@ export class Room {
     return {
       playerId: player.playerId,
       displayName: player.displayName,
+      appearanceId: player.appearanceId,
       x: player.x,
       y: player.y,
       rotation: player.rotation,

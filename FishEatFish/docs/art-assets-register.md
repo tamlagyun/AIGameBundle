@@ -35,3 +35,15 @@
 | `skill-ink-splash` | `ART-PROMPT-UI-0009 v1` | `C:/Users/Administrator/.codex/generated_images/019f5a9b-2560-7341-a563-08fd8c7602d8/exec-89d8317c-30a6-491a-8a93-21cef0229657.png` | 绿色背景色键去背、透明边缘处理、缩放为 1024×1024 | `assets/resources/art/ui/skill-ink-splash.png` | 已确认并调用；已选定；已建立 `.meta`；已接入大王喷墨配置 | 已授权/已导入 |
 | 技能配置入口图标 | `ART-PROMPT-UI-0010 v1` | `C:/Users/Administrator/.codex/generated_images/019f5a9b-2560-7341-a563-08fd8c7602d8/exec-c8445da6-fa0b-4bf0-a4cf-ec1d0ed1e854.png` | 自动绿幕去背、柔化透明边缘、去溢色、透明边距裁切、居中并统一为 1024×1024 PNG | `assets/resources/art/ui/skill-loadout-entry.png` | 已确认并调用；已选定；已建立独立 `.meta`；已接入右上技能配置入口 | 已授权/已导入 |
 | 虎鲸冲刺技能图标 | `ART-PROMPT-UI-0011 v1` | `C:/Users/Administrator/.codex/generated_images/019f5a9b-2560-7341-a563-08fd8c7602d8/exec-0b6f5905-833d-417c-a342-f94e4c3d1762.png` | 自动绿幕去背、柔化透明边缘、去溢色、透明边距裁切、居中并统一为 1024×1024 PNG | `assets/resources/art/ui/skill-orca-charge.png` | 已确认并调用；已选定；已建立独立 `.meta`；已接入虎鲸冲刺技能配置 | 已授权/已导入 |
+| 变身入口图标 | `ART-PROMPT-UI-0012 v1` | `art-output/ART-PROMPT-UI-0012-v1/source.png` | 自动绿幕去背、去溢色、透明边距裁切、居中并统一为 1024×1024 RGBA PNG | `assets/resources/art/ui/transform-entry.png` | 用户已确认；项目通用图像生成接口生成；已选定并接入 `TransformEntryRoot` | 已建立独立 `.meta`，待 IDE 资源刷新复核 |
+
+## 角色形态资源
+
+| 资源 ID | 名称 | 提示词版本 | 原图 | 加工步骤 | 正式路径 | 授权状态 | `.meta` 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| ART-APPEARANCE-0001 | 大王乌贼标准形象 | ART-PROMPT-0005 v1 | `art-output/ART-PROMPT-0005-v1/source.png` | 自动绿幕去背、去溢色、透明边距裁切、居中并统一为 1024×1024 RGBA PNG | `assets/resources/art/characters/giant-squid/portrait.png` | 用户已确认；项目通用图像生成接口生成；已选定 | 已建立独立 `.meta`，待 IDE 资源刷新复核 |
+| ART-APPEARANCE-0002 | 大王乌贼游动动画 | ART-PROMPT-0006 v1 | `art-output/ART-PROMPT-0006-v1/source.png` | 初次固定 3×2 网格切分导致跨格触须残留；2026-07-21 改为在扩展画格中提取最大连通乌贼主体、统一比例、左侧身体基准和透明安全边距，输出 6 张 512×512 RGBA PNG | `assets/resources/art/characters/giant-squid/swim-0.png` 至 `swim-5.png` | 用户已确认；项目通用图像生成接口生成；已选定；实际原图全部朝右 | 6 张均已建立独立 `.meta`，待 IDE 资源刷新复核 |
+| ART-APPEARANCE-0003 | 大王乌贼技能攻击动画 | ART-PROMPT-0007 v1 | `art-output/ART-PROMPT-0007-v1/source.png` | 模型实际输出 1536×1024；4×2 切分、自动绿幕去背、去溢色、统一为 8 张 512×512 RGBA PNG | `assets/resources/art/characters/giant-squid/attack-0.png` 至 `attack-7.png` | 用户已确认；项目通用图像生成接口生成；已选定；实际原图全部朝右 | 8 张均已建立独立 `.meta`，待 IDE 资源刷新复核 |
+| ART-APPEARANCE-0004 | 大王乌贼受击动画 | ART-PROMPT-0008 v1 | `art-output/ART-PROMPT-0008-v1/source.png` | 模型实际输出 1536×1024；4×2 切分、自动绿幕去背、去溢色、统一为 8 张 512×512 RGBA PNG | `assets/resources/art/characters/giant-squid/hurt-0.png` 至 `hurt-7.png` | 用户已确认；项目通用图像生成接口生成；已选定；实际原图全部朝右 | 8 张均已建立独立 `.meta`，待 IDE 资源刷新复核 |
+
+大王乌贼的标准、游动、攻击与受击原图均朝右，形态配置统一登记为 `right`，运行时只通过形态方向配置完成左右翻转。

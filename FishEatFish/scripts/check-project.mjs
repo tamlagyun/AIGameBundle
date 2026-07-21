@@ -16,6 +16,7 @@ const required = [
   'assets/scripts/data/ConfigValidator.ts',
   'assets/scripts/data/SkillCatalog.ts',
   'assets/scripts/data/SkillLoadoutStore.ts',
+  'assets/scripts/data/AppearanceStore.ts',
   'assets/scripts/cocos/SkillActionPanel.ts',
   'assets/scripts/cocos/SkillLoadoutDialog.ts',
   'assets/scripts/cocos/SkillEffectExecutor.ts',
@@ -26,6 +27,7 @@ const required = [
   'assets/scripts/cocos/Player.ts',
   'assets/scripts/cocos/LocalPlayer.ts',
   'assets/scripts/cocos/MainUIManager.ts',
+  'assets/scripts/cocos/TransformDialog.ts',
   'assets/scripts/platform/PlatformService.ts',
   'assets/scripts/platform/PlatformServiceEditor.ts',
   'assets/resources/configs/fish-player.json',
@@ -38,6 +40,9 @@ const required = [
   'assets/resources/configs/skill-orca-charge.json',
   'assets/resources/configs/skill-loadout-player.json',
   'assets/resources/configs/skill-library-player.json',
+  'assets/resources/configs/appearance-crucian.json',
+  'assets/resources/configs/appearance-giant-squid.json',
+  'assets/resources/configs/appearance-library-player.json',
   'assets/resources/configs/world-sea-001.json',
   'assets/resources/art/map/sea-background.png',
   'assets/resources/art/ui/skill-whale-swallow.png',
@@ -45,10 +50,18 @@ const required = [
   'assets/resources/art/ui/skill-death-roll.png',
   'assets/resources/art/ui/skill-loadout-entry.png',
   'assets/resources/art/ui/skill-orca-charge.png',
+  'assets/resources/art/ui/transform-entry.png',
   'assets/resources/art/characters/player/swim-0.png',
   'assets/resources/art/characters/player/swim-5.png',
   'assets/resources/art/characters/player/hurt-0.png',
   'assets/resources/art/characters/player/hurt-7.png',
+  'assets/resources/art/characters/giant-squid/portrait.png',
+  'assets/resources/art/characters/giant-squid/swim-0.png',
+  'assets/resources/art/characters/giant-squid/swim-5.png',
+  'assets/resources/art/characters/giant-squid/attack-0.png',
+  'assets/resources/art/characters/giant-squid/attack-7.png',
+  'assets/resources/art/characters/giant-squid/hurt-0.png',
+  'assets/resources/art/characters/giant-squid/hurt-7.png',
   'docs/game-requirements.md',
   'docs/requirements-changelog.md',
   'docs/art-direction.md',
@@ -68,6 +81,7 @@ const required = [
   ,'docs/auth-and-platform-adapters.md'
   ,'docs/deployment.md'
   ,'docs/skill-configuration.md'
+  ,'docs/appearance-configuration.md'
 ];
 
 const missing = required.filter((path) => !existsSync(fromRoot(path)));

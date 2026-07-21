@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseFishConfig, parseSkillConfig, parseSkillLibraryConfig, parseSkillLoadoutConfig, parseWorldConfig } from '../assets/scripts/data/ConfigValidator.ts';
+import { parseAppearanceLibraryConfig, parseFishConfig, parsePlayerAppearanceConfig, parseSkillConfig, parseSkillLibraryConfig, parseSkillLoadoutConfig, parseWorldConfig } from '../assets/scripts/data/ConfigValidator.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const readJson = (name) => JSON.parse(readFileSync(join(root, 'assets', 'resources', 'configs', name), 'utf8'));
@@ -56,6 +56,16 @@ test('鱼、技能和世界样例配置可校验', () => {
   assert.equal(library.skillConfigPaths.length, 6);
   assert.ok(loadout.skillConfigPaths.every((path) => library.skillConfigPaths.includes(path)));
   assert.ok(library.skillConfigPaths.includes('configs/skill-orca-charge'));
+  const crucianAppearance = parsePlayerAppearanceConfig(readJson('appearance-crucian.json'));
+  const squidAppearance = parsePlayerAppearanceConfig(readJson('appearance-giant-squid.json'));
+  const appearanceLibrary = parseAppearanceLibraryConfig(readJson('appearance-library-player.json'));
+  assert.equal(crucianAppearance.animationPrefixes.attack, 'bite');
+  assert.equal(squidAppearance.displayName, '大王乌贼');
+  assert.deepEqual(squidAppearance.animationArtFacingDirections, { swim: 'right', attack: 'right', hurt: 'right' });
+  assert.equal(squidAppearance.attackFrameCount, 8);
+  assert.equal(squidAppearance.swimFrameDurationSeconds, 0.16);
+  assert.equal(appearanceLibrary.defaultAppearanceId, 'appearance-crucian');
+  assert.deepEqual(appearanceLibrary.appearanceConfigPaths, ['configs/appearance-crucian', 'configs/appearance-giant-squid']);
   const world = parseWorldConfig(readJson('world-sea-001.json'));
   assert.equal(world.maxActiveFish, 30);
   assert.equal(world.maxFullUpdateFish, 16);
@@ -71,4 +81,7 @@ test('配置校验拒绝错误版本和非法数值', () => {
   assert.throws(() => parseSkillLoadoutConfig({ ...readJson('skill-loadout-player.json'), layout: { ...readJson('skill-loadout-player.json').layout, arcAngles: [] } }), /arcAngles/);
   assert.throws(() => parseSkillLoadoutConfig({ ...readJson('skill-loadout-player.json'), skillConfigPaths: ['configs/skill-basic-bite', 'configs/skill-basic-bite'] }), /duplicates/);
   assert.throws(() => parseSkillLibraryConfig({ ...readJson('skill-library-player.json'), skillConfigPaths: [] }), /non-empty/);
+  assert.throws(() => parsePlayerAppearanceConfig({ ...readJson('appearance-giant-squid.json'), animationArtFacingDirections: { swim: 'right', attack: 'up', hurt: 'right' } }), /animationArtFacingDirections\.attack/);
+  assert.throws(() => parsePlayerAppearanceConfig({ ...readJson('appearance-giant-squid.json'), swimFrameDurationSeconds: 0 }), /swimFrameDurationSeconds/);
+  assert.throws(() => parseAppearanceLibraryConfig({ ...readJson('appearance-library-player.json'), appearanceConfigPaths: [] }), /non-empty/);
 });

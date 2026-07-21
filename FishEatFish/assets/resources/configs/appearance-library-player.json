@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 2,
+  "id": "player-appearance-library",
+  "defaultAppearanceId": "appearance-crucian",
+  "appearanceConfigPaths": [
+    "configs/appearance-crucian",
+    "configs/appearance-giant-squid"
+  ]
+}

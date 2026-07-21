@@ -2,7 +2,7 @@ import type { WebSocket } from 'ws';
 import type { AuthService } from '../auth/auth-service.js';
 import type { RoomManager } from '../room/room-manager.js';
 import { decode, encode } from '../protocol/protocol-codec.js';
-import { parseClientMessage, parseInput, parseSkill } from '../protocol/message-schemas.js';
+import { parseAppearance, parseClientMessage, parseInput, parseSkill } from '../protocol/message-schemas.js';
 import { message, type RoomSnapshot } from '../protocol/server-messages.js';
 
 export function attachSession(socket: WebSocket, token: string, auth: AuthService, rooms: RoomManager) {
@@ -21,6 +21,7 @@ export function attachSession(socket: WebSocket, token: string, auth: AuthServic
         socket.send(encode(message('roomSnapshot', room.snapshot(player.playerId) as RoomSnapshot)));
       } else if (parsed.type === 'input' && playerId) room.input(playerId, parseInput(parsed.payload));
       else if (parsed.type === 'skill' && playerId) room.skill(playerId, parseSkill(parsed.payload));
+      else if (parsed.type === 'appearance' && playerId) room.appearance(playerId, parseAppearance(parsed.payload));
       else if (parsed.type === 'ping') socket.send(encode(message('pong', { now: Date.now() }, parsed.requestId)));
       else if (parsed.type === 'leaveRoom' && playerId) { room.remove(playerId); playerId = undefined; socket.close(1000); }
     } catch { socket.send(encode(message('error', { code: 'INVALID_MESSAGE' }))); }

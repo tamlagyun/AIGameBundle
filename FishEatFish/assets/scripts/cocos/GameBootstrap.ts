@@ -25,14 +25,14 @@ import {
   tween
 } from 'cc';
 import { moveWithinBounds, shouldFlipArtFrame } from '../core/MovementSystem.ts';
-import type { ArtFacingDirection, SkillConfig, Vec2Value } from '../core/types.ts';
-import { parseFishConfig, parseSkillConfig, parseSkillLibraryConfig, parseSkillLoadoutConfig } from '../data/ConfigValidator.ts';
+import type { ArtFacingDirection, PlayerAppearanceConfig, SkillConfig, Vec2Value } from '../core/types.ts';
+import { parseAppearanceLibraryConfig, parseFishConfig, parsePlayerAppearanceConfig, parseSkillConfig, parseSkillLibraryConfig, parseSkillLoadoutConfig } from '../data/ConfigValidator.ts';
 import { SkillCatalog } from '../data/SkillCatalog.ts';
 import { createPlatformService } from '../platform/PlatformAdapters.ts';
 import { RealtimeSession } from '../network/RealtimeSession.ts';
 import { RemotePlayerRegistry } from '../network/RemotePlayerRegistry.ts';
 import { resolveNetworkEndpoint } from '../network/NetworkEnvironment.ts';
-import type { NetworkMessage, RemotePlayerState, SkillEffect, SkillResolved, PlayerDamaged, PlayerDied, PlayerRespawned, CombatSettlement, SkillId } from '../network/NetworkProtocol.ts';
+import type { AppearanceChanged, AppearanceId, NetworkMessage, RemotePlayerState, SkillEffect, SkillResolved, PlayerDamaged, PlayerDied, PlayerRespawned, CombatSettlement, SkillId } from '../network/NetworkProtocol.ts';
 import { SkillActionPanel } from './SkillActionPanel.ts';
 import { SkillEffectExecutor } from './SkillEffectExecutor.ts';
 import { FishHealthBarOverlay } from './FishHealthBarOverlay.ts';
@@ -44,6 +44,14 @@ import { Player } from './Player.ts';
 import { MainUIManager } from './MainUIManager.ts';
 
 const { ccclass } = _decorator;
+
+interface AppearanceRuntimeAssets {
+  config: PlayerAppearanceConfig;
+  portrait: ImageAsset;
+  swimFrames: SpriteFrame[];
+  attackFrames: SpriteFrame[];
+  hurtFrames: SpriteFrame[];
+}
 
 @ccclass('GameBootstrap')
 export class GameBootstrap extends Component {
@@ -74,10 +82,13 @@ export class GameBootstrap extends Component {
   private swimFrames: SpriteFrame[] = [];
   private biteFrames: SpriteFrame[] = [];
   private hurtFrames: SpriteFrame[] = [];
+  private readonly appearanceAssets = new Map<string, AppearanceRuntimeAssets>();
+  private currentAppearanceId: AppearanceId = 'appearance-crucian';
+  private currentSwimFrameDurationSeconds = 0.22;
   private healthBarFrame?: SpriteFrame;
   private healthBarFill?: SpriteFrame;
   private readonly remoteAnimationTokens = new WeakMap<Sprite, number>();
-  private readonly remoteSwimStates = new Map<Sprite, { frameIndex: number; elapsed: number; active: boolean }>();
+  private readonly remoteSwimStates = new Map<Sprite, { frameIndex: number; elapsed: number; active: boolean; frames: SpriteFrame[]; frameDuration: number }>();
   private readonly whaleOpacityTokens = new WeakMap<Player, number>();
   private readonly whaleScaleTokens = new WeakMap<Player, number>();
   private readonly localWhaleTargetSequences = new Map<string, number>();
@@ -178,14 +189,16 @@ export class GameBootstrap extends Component {
     if (!worldRoot || !playerLayer || !this.cameraNode || !this.hudRoot) {
       throw new Error('MainScene 缺少世界、玩家、镜头或 HUD 节点。');
     }
-    const [playerFishConfigRaw, skillLoadoutRaw, skillLibraryRaw] = await Promise.all([
+    const [playerFishConfigRaw, skillLoadoutRaw, skillLibraryRaw, appearanceLibraryRaw] = await Promise.all([
       this.loadJson('configs/fish-player'),
       this.loadJson('configs/skill-loadout-player'),
-      this.loadJson('configs/skill-library-player')
+      this.loadJson('configs/skill-library-player'),
+      this.loadJson('configs/appearance-library-player')
     ]);
     const playerFishConfig = parseFishConfig(playerFishConfigRaw);
     const skillLoadout = parseSkillLoadoutConfig(skillLoadoutRaw);
     const skillLibrary = parseSkillLibraryConfig(skillLibraryRaw);
+    const appearanceLibrary = parseAppearanceLibraryConfig(appearanceLibraryRaw);
     const loadedSkillEntries = await Promise.all(skillLibrary.skillConfigPaths.map(async (path) => ({ path, skill: parseSkillConfig(await this.loadJson(path)) })));
     const skillByPath = new Map(loadedSkillEntries.map((entry) => [entry.path, entry.skill]));
     const allSkills = loadedSkillEntries.map((entry) => entry.skill);
@@ -195,28 +208,48 @@ export class GameBootstrap extends Component {
       return skill;
     });
     this.skillCatalog = new SkillCatalog(allSkills);
-    this.artFacingDirection = playerFishConfig.artFacingDirection;
+    const appearances = await Promise.all(appearanceLibrary.appearanceConfigPaths.map(async (path) => parsePlayerAppearanceConfig(await this.loadJson(path))));
     // WorldRoot、HudRoot 和 MainCamera 共用 Canvas 中心作为局部原点。
     // Canvas 的锚点换算由引擎负责，子根节点不得再次减去半屏尺寸。
     this.hudRoot.setPosition(0, 0, 0);
     const skillImages = new Map<string, ImageAsset>();
-    const [backgroundImage, ...images] = await Promise.all([
+    const images = await Promise.all([
       this.loadImage('art/map/sea-background'),
-      ...Array.from({ length: 6 }, (_, index) => this.loadImage(`art/characters/player/swim-${index}`)),
-      ...Array.from({ length: 8 }, (_, index) => this.loadImage(`art/characters/player/bite-${index}`)),
-      ...Array.from({ length: 8 }, (_, index) => this.loadImage(`art/characters/player/hurt-${index}`)),
       this.loadImage('art/ui/joystick-base'),
       this.loadImage('art/ui/joystick-knob'),
       this.loadImage('art/ui/health-bar-frame'),
       this.loadImage('art/ui/health-bar-fill'),
       this.loadImage('art/ui/skill-loadout-entry'),
+      this.loadImage('art/ui/transform-entry'),
       ...allSkills.map((skill) => this.loadImage(skill.ui.iconPath))
     ]);
-    const fishImages = images.slice(0, 6);
-    const biteImages = images.slice(6, 14);
-    const hurtImages = images.slice(14, 22);
-    const [joystickBase, joystickKnob, healthBarFrame, healthBarFill, skillEntryImage, ...skillImageAssets] = images.slice(22);
+    const [backgroundImage, joystickBase, joystickKnob, healthBarFrame, healthBarFill, skillEntryImage, transformEntryImage, ...skillImageAssets] = images;
     allSkills.forEach((skill, index) => skillImages.set(skill.id, skillImageAssets[index] as ImageAsset));
+    const appearancePortraits = new Map<string, ImageAsset>();
+    for (const config of appearances) {
+      const [portrait, ...animationImages] = await Promise.all([
+        this.loadImage(config.portraitPath),
+        ...Array.from({ length: config.swimFrameCount }, (_, index) => this.loadImage(`${config.resourceRoot}/${config.animationPrefixes.swim}-${index}`)),
+        ...Array.from({ length: config.attackFrameCount }, (_, index) => this.loadImage(`${config.resourceRoot}/${config.animationPrefixes.attack}-${index}`)),
+        ...Array.from({ length: config.hurtFrameCount }, (_, index) => this.loadImage(`${config.resourceRoot}/${config.animationPrefixes.hurt}-${index}`))
+      ]);
+      const swimImages = animationImages.slice(0, config.swimFrameCount);
+      const attackImages = animationImages.slice(config.swimFrameCount, config.swimFrameCount + config.attackFrameCount);
+      const hurtImages = animationImages.slice(config.swimFrameCount + config.attackFrameCount);
+      const assets: AppearanceRuntimeAssets = {
+        config,
+        portrait,
+        swimFrames: swimImages.map((image) => this.createFishSpriteFrame(image, config.animationArtFacingDirections.swim, config.artFacingDirection)),
+        attackFrames: attackImages.map((image) => this.createFishSpriteFrame(image, config.animationArtFacingDirections.attack, config.artFacingDirection)),
+        hurtFrames: hurtImages.map((image) => this.createFishSpriteFrame(image, config.animationArtFacingDirections.hurt, config.artFacingDirection))
+      };
+      this.appearanceAssets.set(config.id, assets);
+      appearancePortraits.set(config.id, portrait);
+    }
+    const defaultAppearance = this.appearanceAssets.get(appearanceLibrary.defaultAppearanceId);
+    if (!defaultAppearance) throw new Error(`默认形象资源不存在：${appearanceLibrary.defaultAppearanceId}`);
+    if (playerFishConfig.artFacingDirection !== defaultAppearance.config.artFacingDirection) throw new Error('玩家鱼与默认形象美术方向不一致');
+    this.artFacingDirection = defaultAppearance.config.artFacingDirection;
 
     const background = new Node('OceanMap');
     background.layer = worldRoot.layer;
@@ -228,9 +261,7 @@ export class GameBootstrap extends Component {
     worldRoot.addChild(background);
     background.setSiblingIndex(0);
 
-    this.swimFrames = fishImages.map((image) => this.createFishSpriteFrame(image, playerFishConfig.animationArtFacingDirections.swim));
-    this.biteFrames = biteImages.map((image) => this.createFishSpriteFrame(image, playerFishConfig.animationArtFacingDirections.bite));
-    this.hurtFrames = hurtImages.map((image) => this.createFishSpriteFrame(image, playerFishConfig.animationArtFacingDirections.hurt));
+    this.useLocalAppearanceAssets(defaultAppearance);
     this.healthBarFrame = this.createSpriteFrame(healthBarFrame);
     this.healthBarFill = this.createSpriteFrame(healthBarFill);
     this.mainUi = new MainUIManager({
@@ -242,6 +273,11 @@ export class GameBootstrap extends Component {
       skills,
       skillImages,
       skillEntryImage: skillEntryImage as ImageAsset,
+      transformEntryImage: transformEntryImage as ImageAsset,
+      appearances,
+      appearancePortraits,
+      defaultAppearanceId: appearanceLibrary.defaultAppearanceId,
+      onAppearanceChange: (appearanceId) => this.applyLocalAppearance(appearanceId, true),
       onSkillActivate: (skill) => this.skillExecutor?.activate(skill) ?? false,
       onJoystickStart: this.onJoystickTouchStart,
       onJoystickMove: this.onJoystickTouchMove,
@@ -253,9 +289,13 @@ export class GameBootstrap extends Component {
     this.joystickNode = this.mainUi.joystickRoot;
     this.joystickKnob = this.mainUi.joystickKnob;
     this.skillPanel = this.mainUi.skillPanel;
+    const selectedAppearance = this.getAppearanceAssets(this.mainUi.selectedAppearanceId);
+    this.useLocalAppearanceAssets(selectedAppearance);
+    this.currentAppearanceId = selectedAppearance.config.id as AppearanceId;
     this.roleManager = new RoleManager(playerLayer, this.swimFrames[0], this.artFacingDirection);
     const localRole = this.roleManager.createLocalPlayer();
     this.localPlayer = localRole;
+    localRole.setAppearance(this.currentAppearanceId, this.swimFrames[0] ?? null, this.artFacingDirection);
     localRole.setFacing(180);
     this.createFishHealthDisplay('local-player', localRole.node, localRole.health, localRole.maxHealth);
     this.createFishNameDisplay('local-player', localRole.node, '');
@@ -265,13 +305,50 @@ export class GameBootstrap extends Component {
     this.updateHealthHud();
   }
 
+  private getAppearanceAssets(appearanceId: string | undefined): AppearanceRuntimeAssets {
+    return this.appearanceAssets.get(appearanceId ?? '')
+      ?? this.appearanceAssets.get('appearance-crucian')
+      ?? [...this.appearanceAssets.values()][0]
+      ?? (() => { throw new Error('没有可用的玩家形象资源'); })();
+  }
+
+  private useLocalAppearanceAssets(assets: AppearanceRuntimeAssets): void {
+    this.artFacingDirection = assets.config.artFacingDirection;
+    this.swimFrames = assets.swimFrames;
+    this.biteFrames = assets.attackFrames;
+    this.hurtFrames = assets.hurtFrames;
+    this.currentSwimFrameDurationSeconds = assets.config.swimFrameDurationSeconds;
+    this.swimFrameIndex = 0;
+    this.animationElapsed = 0;
+  }
+
+  private applyLocalAppearance(appearanceId: string, syncToServer: boolean): void {
+    const assets = this.getAppearanceAssets(appearanceId);
+    const nextId = assets.config.id as AppearanceId;
+    const changed = this.currentAppearanceId !== nextId || this.localPlayer?.appearanceId !== nextId;
+    this.currentAppearanceId = nextId;
+    if (changed) {
+      this.useLocalAppearanceAssets(assets);
+      if (this.localPlayer) {
+        this.fishActionState = 'swim';
+        this.fishActionElapsed = 0;
+        this.fishActionDuration = 0;
+        this.localPlayer.setAppearance(nextId, assets.swimFrames[0] ?? null, assets.config.artFacingDirection);
+        if (this.actionHint) this.actionHint.string = `已变身为${assets.config.displayName}`;
+      }
+    }
+    if (syncToServer && !this.offlineModeSelected) this.realtime.sendAppearance(nextId);
+  }
+
   private createRemotePlayerView(state: RemotePlayerState) {
     const roleManager = this.roleManager;
     if (!roleManager) throw new Error('RoleManager 尚未初始化。');
     const role = roleManager.createRemotePlayer(state.playerId);
     const node = role.node;
     const sprite = role.sprite;
-    this.remoteSwimStates.set(sprite, { frameIndex: 0, elapsed: 0, active: true });
+    let appearance = this.getAppearanceAssets(state.appearanceId);
+    role.setAppearance(appearance.config.id, appearance.swimFrames[0] ?? null, appearance.config.artFacingDirection);
+    this.remoteSwimStates.set(sprite, { frameIndex: 0, elapsed: 0, active: true, frames: appearance.swimFrames, frameDuration: appearance.config.swimFrameDurationSeconds });
     role.setFacing(state.rotation);
     role.setHealth(state.health, state.maxHealth);
     role.setDead(state.dead);
@@ -280,6 +357,20 @@ export class GameBootstrap extends Component {
     return {
       setPosition: (x: number, y: number) => role.setPosition(x, y),
       setRotation: (angle: number) => role.setFacing(angle),
+      setAppearance: (appearanceId: AppearanceId) => {
+        if (role.appearanceId === appearanceId) return;
+        appearance = this.getAppearanceAssets(appearanceId);
+        this.remoteAnimationTokens.set(sprite, (this.remoteAnimationTokens.get(sprite) ?? 0) + 1);
+        const swimState = this.remoteSwimStates.get(sprite);
+        if (swimState) {
+          swimState.frames = appearance.swimFrames;
+          swimState.frameDuration = appearance.config.swimFrameDurationSeconds;
+          swimState.frameIndex = 0;
+          swimState.elapsed = 0;
+          swimState.active = !role.dead;
+        }
+        role.setAppearance(appearanceId, appearance.swimFrames[0] ?? null, appearance.config.artFacingDirection);
+      },
       setHealth: (health: number, maxHealth: number) => { role.setHealth(health, maxHealth); this.setFishHealth(state.playerId, health, maxHealth); },
       playSkill: (skillId: SkillId, effectDurationMs?: number) => {
         const skill = this.getConfiguredNetworkSkill(skillId);
@@ -308,7 +399,7 @@ export class GameBootstrap extends Component {
           new Color(skill.clientEffect.visualColor.r, skill.clientEffect.visualColor.g, skill.clientEffect.visualColor.b, skill.clientEffect.visualColor.a),
           skill.clientEffect.visualDurationSeconds
         );
-        this.playRemoteFishAnimation(sprite, this.biteFrames, actionDuration);
+        this.playRemoteFishAnimation(sprite, appearance.attackFrames, actionDuration);
         if (skill.clientEffect.kind === 'deathRoll') role.startVisualRoll(actionDuration);
         if (skill.clientEffect.kind === 'whaleSwallow') {
           this.applyWhaleSourceVisual(
@@ -325,7 +416,7 @@ export class GameBootstrap extends Component {
       playKnockback: (targetX: number, targetY: number, effectDurationMs?: number) => role.playKnockback(targetX, targetY, (effectDurationMs ?? 650) / 1000),
       playHurt: (skillId: string) => {
         const duration = this.getConfiguredNetworkSkill(skillId)?.clientEffect.animationDurationSeconds ?? 0.34;
-        this.playRemoteFishAnimation(sprite, this.hurtFrames, duration);
+        this.playRemoteFishAnimation(sprite, appearance.hurtFrames, duration);
       },
       playDeath: () => {
         role.setDead(true);
@@ -336,7 +427,7 @@ export class GameBootstrap extends Component {
       playRespawn: () => {
         role.setDead(false);
         this.stopRemoteFishAnimation(sprite);
-        role.setFrame(this.swimFrames[0] ?? null);
+        role.setFrame(appearance.swimFrames[0] ?? null);
       },
       destroy: () => {
         this.remoteSwimStates.delete(sprite);
@@ -415,7 +506,7 @@ export class GameBootstrap extends Component {
     }, index * frameDuration));
     this.scheduleOnce(() => {
       if (sprite.isValid && this.remoteAnimationTokens.get(sprite) === token) {
-        sprite.spriteFrame = this.swimFrames[0] ?? null;
+        sprite.spriteFrame = swimState?.frames[0] ?? null;
         if (swimState) { swimState.frameIndex = 0; swimState.elapsed = 0; swimState.active = true; }
       }
     }, duration);
@@ -428,14 +519,13 @@ export class GameBootstrap extends Component {
   }
 
   private advanceRemoteSwimAnimations(deltaTime: number): void {
-    if (this.swimFrames.length === 0) return;
     for (const [sprite, state] of this.remoteSwimStates) {
-      if (!sprite.isValid || !state.active) continue;
+      if (!sprite.isValid || !state.active || state.frames.length === 0) continue;
       state.elapsed += deltaTime;
-      while (state.elapsed >= 0.11) {
-        state.elapsed -= 0.11;
-        state.frameIndex = (state.frameIndex + 1) % this.swimFrames.length;
-        sprite.spriteFrame = this.swimFrames[state.frameIndex] ?? this.swimFrames[0];
+      while (state.elapsed >= state.frameDuration) {
+        state.elapsed -= state.frameDuration;
+        state.frameIndex = (state.frameIndex + 1) % state.frames.length;
+        sprite.spriteFrame = state.frames[state.frameIndex] ?? state.frames[0];
       }
     }
   }
@@ -556,17 +646,24 @@ export class GameBootstrap extends Component {
       const self = snapshot.players.find((player) => player.playerId === this.networkPlayerId);
       if (self) this.setFishName('local-player', self.displayName);
       this.applyRemotePlayers(snapshot.players);
-      if (self) this.applyLocalSnapshotAction(self);
+      if (self) {
+        this.applyLocalSnapshotAction(self);
+        this.realtime.sendAppearance(this.currentAppearanceId);
+      }
     } else if (message.type === 'stateSnapshot') {
       const snapshot = message.payload as { players: RemotePlayerState[] };
       this.applyRemotePlayers(snapshot.players);
       const self = snapshot.players.find((player) => player.playerId === this.networkPlayerId);
-      if (self) this.applyLocalSnapshotAction(self);
+      if (self) { this.applyLocalAppearance(self.appearanceId, false); this.applyLocalSnapshotAction(self); }
     } else if (message.type === 'playerJoined') {
       const player = message.payload as RemotePlayerState;
       if (player.playerId !== this.networkPlayerId) this.remotePlayers?.upsert(player);
     } else if (message.type === 'playerRemoved') {
       this.remotePlayers?.remove((message.payload as { playerId: string }).playerId);
+    } else if (message.type === 'appearanceChanged') {
+      const event = message.payload as AppearanceChanged;
+      if (event.playerId === this.networkPlayerId) this.applyLocalAppearance(event.appearanceId, false);
+      else this.remotePlayers?.setAppearance(event.playerId, event.appearanceId);
     } else if (message.type === 'skillEffect') {
       const effect = message.payload as SkillEffect;
       if (this.isWhaleSwallowNetworkSkill(effect.skillId)) this.handleWhaleSwallowEffect(effect);
@@ -606,7 +703,7 @@ export class GameBootstrap extends Component {
     } else if (message.type === 'playerRespawned') {
       const event = message.payload as PlayerRespawned;
       if (event.playerId === this.networkPlayerId) { this.localPlayer?.setDead(false); this.localPlayer?.setHealth(event.health, event.maxHealth); this.updateHealthHud(); this.localPlayer?.setPosition(event.x, event.y); this.actionHint && (this.actionHint.string = '已复活，3 秒无敌'); }
-      else { this.remotePlayers?.upsert({ playerId: event.playerId, displayName: '远端玩家', x: event.x, y: event.y, rotation: 0, lastProcessedClientTick: 0, health: event.health, maxHealth: event.maxHealth, level: 1, dead: false }); this.remotePlayers?.playRespawn(event.playerId); }
+      else { this.remotePlayers?.setTransform(event.playerId, event.x, event.y, 0); this.remotePlayers?.setHealth(event.playerId, event.health, event.maxHealth); this.remotePlayers?.playRespawn(event.playerId); }
     } else if (message.type === 'combatSettlement') {
       const event = message.payload as CombatSettlement;
       if (event.playerId === this.networkPlayerId) { this.localPlayer?.setHealth(event.health, event.maxHealth); this.updateHealthHud(); this.actionHint && (this.actionHint.string = event.leveled ? `击败玩家，升级至 ${event.level} 级，生命上限 ${event.maxHealth}` : `击败玩家，获得经验，击杀 ${event.kills}`); }
@@ -618,6 +715,7 @@ export class GameBootstrap extends Component {
         this.updateHealthHud();
         this.localPlayer?.setPosition(state.x, state.y);
         this.localPlayer?.setFacing(state.rotation, state.dead ? 0.6 : undefined);
+        this.applyLocalAppearance(state.appearanceId, false);
         this.applyLocalSnapshotAction(state);
       }
     }
@@ -976,7 +1074,7 @@ export class GameBootstrap extends Component {
   private advanceSwimAnimation(deltaTime: number, moving: boolean): void {
     if (!this.localPlayer || this.swimFrames.length === 0 || this.fishActionState !== 'swim') return;
     this.animationElapsed += deltaTime;
-    const frameDuration = moving ? 0.11 : 0.22;
+    const frameDuration = moving ? Math.min(0.11, this.currentSwimFrameDurationSeconds) : this.currentSwimFrameDurationSeconds;
     while (this.animationElapsed >= frameDuration) {
       this.animationElapsed -= frameDuration;
       this.swimFrameIndex = (this.swimFrameIndex + 1) % this.swimFrames.length;
@@ -1020,9 +1118,9 @@ export class GameBootstrap extends Component {
     return spriteFrame;
   }
 
-  private createFishSpriteFrame(image: ImageAsset, sourceFacingDirection: ArtFacingDirection): SpriteFrame {
+  private createFishSpriteFrame(image: ImageAsset, sourceFacingDirection: ArtFacingDirection, targetFacingDirection: ArtFacingDirection): SpriteFrame {
     const spriteFrame = this.createSpriteFrame(image);
-    spriteFrame.flipUVX = shouldFlipArtFrame(sourceFacingDirection, this.artFacingDirection);
+    spriteFrame.flipUVX = shouldFlipArtFrame(sourceFacingDirection, targetFacingDirection);
     return spriteFrame;
   }
 }

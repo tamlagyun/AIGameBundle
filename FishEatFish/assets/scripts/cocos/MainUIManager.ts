@@ -1,8 +1,10 @@
 import { Color, EventTouch, ImageAsset, Label, Node, Sprite, SpriteFrame, Texture2D, UITransform, Widget } from 'cc';
-import type { SkillConfig, SkillLoadoutConfig } from '../core/types.ts';
+import type { PlayerAppearanceConfig, SkillConfig, SkillLoadoutConfig } from '../core/types.ts';
+import { AppearanceStore } from '../data/AppearanceStore.ts';
 import { SkillLoadoutStore } from '../data/SkillLoadoutStore.ts';
 import { SkillActionPanel } from './SkillActionPanel.ts';
 import { SkillLoadoutDialog } from './SkillLoadoutDialog.ts';
+import { TransformDialog } from './TransformDialog.ts';
 
 export interface MainUIManagerOptions {
   hudRoot: Node;
@@ -13,6 +15,11 @@ export interface MainUIManagerOptions {
   skills: SkillConfig[];
   skillImages: Map<string, ImageAsset>;
   skillEntryImage: ImageAsset;
+  transformEntryImage: ImageAsset;
+  appearances: PlayerAppearanceConfig[];
+  appearancePortraits: Map<string, ImageAsset>;
+  defaultAppearanceId: string;
+  onAppearanceChange: (appearanceId: string) => void;
   onSkillActivate: (skill: SkillConfig) => boolean;
   onJoystickStart: (event: EventTouch) => void;
   onJoystickMove: (event: EventTouch) => void;
@@ -29,6 +36,8 @@ export class MainUIManager {
   public readonly joystickKnob: Node;
   public readonly skillPanel: SkillActionPanel;
   public readonly skillLoadoutDialog: SkillLoadoutDialog;
+  public readonly transformDialog: TransformDialog;
+  public readonly selectedAppearanceId: string;
 
   public constructor(options: MainUIManagerOptions) {
     this.inputLayer = this.resolveInputLayer(options.hudRoot);
@@ -46,6 +55,8 @@ export class MainUIManager {
     const primarySkill = options.skills.find((skill) => skill.ui.slot === 'primary');
     if (!primarySkill) throw new Error('默认技能栏缺少普通攻击');
     const loadoutStore = new SkillLoadoutStore(options.allSkills, options.skills);
+    const appearanceStore = new AppearanceStore(options.appearances, options.defaultAppearanceId);
+    this.selectedAppearanceId = appearanceStore.getSelected().id;
     this.skillPanel = new SkillActionPanel(
       this.inputLayer,
       options.skillLoadout,
@@ -53,8 +64,12 @@ export class MainUIManager {
       options.skillImages,
       options.onSkillActivate
     );
+    const topRightFeatureRoot = this.createContainer(this.inputLayer, 'TopRightFeatureRoot', 224, 116, 1, 1);
+    this.alignToTopRight(topRightFeatureRoot, 28, 24);
     this.skillLoadoutDialog = new SkillLoadoutDialog({
-      parent: this.inputLayer,
+      entryParent: topRightFeatureRoot,
+      dialogParent: this.inputLayer,
+      entryX: -52,
       entryImage: options.skillEntryImage,
       skillImages: options.skillImages,
       getEquippedSkills: () => loadoutStore.getEquippedSkills(),
@@ -65,7 +80,23 @@ export class MainUIManager {
         if (!replacement) return false;
         this.skillPanel.replaceArcSkill(slotIndex, replacement);
         return true;
-      }
+      },
+      onOpen: () => this.transformDialog?.close()
+    });
+    this.transformDialog = new TransformDialog({
+      entryParent: topRightFeatureRoot,
+      dialogParent: this.inputLayer,
+      entryX: -164,
+      entryImage: options.transformEntryImage,
+      appearances: appearanceStore.getAll(),
+      portraits: options.appearancePortraits,
+      initialAppearanceId: this.selectedAppearanceId,
+      onSelect: (appearanceId) => {
+        if (!appearanceStore.select(appearanceId)) return false;
+        options.onAppearanceChange(appearanceId);
+        return true;
+      },
+      onOpen: () => this.skillLoadoutDialog.close()
     });
   }
 
@@ -139,6 +170,15 @@ export class MainUIManager {
     widget.isAlignBottom = true;
     widget.left = left;
     widget.bottom = bottom;
+    widget.updateAlignment();
+  }
+
+  private alignToTopRight(node: Node, right: number, top: number): void {
+    const widget = node.addComponent(Widget);
+    widget.isAlignRight = true;
+    widget.isAlignTop = true;
+    widget.right = right;
+    widget.top = top;
     widget.updateAlignment();
   }
 

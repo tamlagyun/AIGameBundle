@@ -1,10 +1,17 @@
 # 实时协议
 
-所有消息使用 `{ protocolVersion, type, requestId?, payload }`。客户端消息为 `joinRoom`、`input`、`skill`、`ping`、`leaveRoom`；服务器消息包括 `roomSnapshot`、`playerJoined`、`playerRemoved`、`stateSnapshot`、`stateCorrection`、`skillEffect`、`skillResolved`、战斗事件、`pong` 和 `error`。
+所有消息使用 `{ protocolVersion, type, requestId?, payload }`。客户端消息为 `joinRoom`、`input`、`skill`、`appearance`、`ping`、`leaveRoom`；服务器消息包括 `roomSnapshot`、`playerJoined`、`playerRemoved`、`appearanceChanged`、`stateSnapshot`、`stateCorrection`、`skillEffect`、`skillResolved`、战斗事件、`pong` 和 `error`。
 
 `input` 包含 `clientTick`、`moveX`、`moveY` 和 `rotation`。服务器拒绝越界输入、错误协议版本和不属于房间的玩家输入。
 
 `skill` 当前支持 `skill-basic-bite`、`skill-dash-bite`、`skill-whale-swallow`、`skill-death-roll`、`skill-ink-splash` 和 `skill-orca-charge`。客户端提交的 `x`、`y` 和目标不参与权威命中或选目标。
+
+## 角色形态同步
+
+- 客户端选择形态后发送 `appearance { appearanceId }`，当前只允许 `appearance-crucian` 和 `appearance-giant-squid`。
+- 服务端校验形态白名单、保存到房间内玩家状态，并向全房间广播 `appearanceChanged { playerId, appearanceId, serverTick }`。
+- `roomSnapshot`、`stateSnapshot` 和 `stateCorrection` 中的每个玩家状态都携带 `appearanceId`，避免后来加入的客户端缺失已有玩家形态。
+- 形态只控制客户端表现资源，不改变服务端位置、生命、等级、伤害、碰撞体或技能装配。
 
 鲸吞成功时，`skillEffect` 附带：
 

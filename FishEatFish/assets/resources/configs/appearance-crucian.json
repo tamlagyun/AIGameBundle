@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "id": "appearance-crucian",
+  "displayName": "小鲫鱼",
+  "portraitPath": "art/characters/player/swim-0",
+  "resourceRoot": "art/characters/player",
+  "artFacingDirection": "right",
+  "animationArtFacingDirections": {
+    "swim": "right",
+    "attack": "left",
+    "hurt": "right"
+  },
+  "animationPrefixes": {
+    "swim": "swim",
+    "attack": "bite",
+    "hurt": "hurt"
+  },
+  "swimFrameCount": 6,
+  "swimFrameDurationSeconds": 0.22,
+  "attackFrameCount": 8,
+  "hurtFrameCount": 8
+}

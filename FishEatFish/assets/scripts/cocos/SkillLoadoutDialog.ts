@@ -1,13 +1,16 @@
-import { BlockInputEvents, Color, Graphics, ImageAsset, Label, Node, Sprite, SpriteFrame, Texture2D, UITransform, Widget } from 'cc';
+import { BlockInputEvents, Color, Graphics, ImageAsset, Label, Node, Sprite, SpriteFrame, Texture2D, UITransform } from 'cc';
 import type { SkillConfig } from '../core/types.ts';
 
 export interface SkillLoadoutDialogOptions {
-  parent: Node;
+  entryParent: Node;
+  dialogParent: Node;
+  entryX: number;
   entryImage: ImageAsset;
   skillImages: Map<string, ImageAsset>;
   getEquippedSkills: () => SkillConfig[];
   getAvailableSkills: () => SkillConfig[];
   onReplace: (slotIndex: number, skillId: string) => boolean;
+  onOpen?: () => void;
 }
 
 /** Fixed HUD entry and modal used to replace one of the four equipped skill slots. */
@@ -27,6 +30,7 @@ export class SkillLoadoutDialog {
   }
 
   public open(): void {
+    this.options.onOpen?.();
     this.pageIndex = 0;
     this.refresh();
     this.dialogRoot.active = true;
@@ -61,21 +65,15 @@ export class SkillLoadoutDialog {
   }
 
   private createEntry(): void {
-    const root = this.createContainer(this.options.parent, 'SkillLoadoutEntryRoot', 104, 116);
-    root.getComponent(UITransform)?.setAnchorPoint(1, 1);
-    const widget = root.addComponent(Widget);
-    widget.isAlignRight = true;
-    widget.isAlignTop = true;
-    widget.right = 28;
-    widget.top = 24;
-    widget.updateAlignment();
-    this.createSprite(root, 'SkillLoadoutEntryIcon', this.options.entryImage, 82, 82, -52, -43);
-    this.createLabel(root, 'SkillLoadoutEntryLabel', '技能', 20, -52, -101, 104, 28);
+    const root = this.createContainer(this.options.entryParent, 'SkillLoadoutEntryRoot', 104, 116);
+    root.setPosition(this.options.entryX, -58, 0);
+    this.createSprite(root, 'SkillLoadoutEntryIcon', this.options.entryImage, 82, 82, 0, 15);
+    this.createLabel(root, 'SkillLoadoutEntryLabel', '技能', 20, 0, -43, 104, 28);
     this.bindTouch(root, () => this.open());
   }
 
   private createDialog(): Node {
-    const root = this.createContainer(this.options.parent, 'SkillLoadoutDialog', 1280, 720);
+    const root = this.createContainer(this.options.dialogParent, 'SkillLoadoutDialog', 1280, 720);
     root.setPosition(0, 0, 0);
     root.addComponent(BlockInputEvents);
     const shade = root.addComponent(Graphics);

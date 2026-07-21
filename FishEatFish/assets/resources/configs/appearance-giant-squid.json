@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "id": "appearance-giant-squid",
+  "displayName": "大王乌贼",
+  "portraitPath": "art/characters/giant-squid/portrait",
+  "resourceRoot": "art/characters/giant-squid",
+  "artFacingDirection": "right",
+  "animationArtFacingDirections": {
+    "swim": "right",
+    "attack": "right",
+    "hurt": "right"
+  },
+  "animationPrefixes": {
+    "swim": "swim",
+    "attack": "attack",
+    "hurt": "hurt"
+  },
+  "swimFrameCount": 6,
+  "swimFrameDurationSeconds": 0.16,
+  "attackFrameCount": 8,
+  "hurtFrameCount": 8
+}

@@ -4,6 +4,7 @@ import type { ArtFacingDirection } from '../core/types.ts';
 
 /** 所有可见玩家共有的客户端角色对象与表现状态。 */
 export class Player {
+  public appearanceId = 'appearance-crucian';
   public health = 100;
   public maxHealth = 100;
   public dead = false;
@@ -21,8 +22,15 @@ export class Player {
     public readonly node: Node,
     public readonly sprite: Sprite,
     private readonly visualNode: Node,
-    private readonly artFacingDirection: ArtFacingDirection
+    private artFacingDirection: ArtFacingDirection
   ) {}
+
+  public setAppearance(appearanceId: string, initialFrame: Sprite['spriteFrame'], artFacingDirection: ArtFacingDirection): void {
+    this.appearanceId = appearanceId;
+    this.artFacingDirection = artFacingDirection;
+    this.setFrame(initialFrame);
+    this.setFacing(this.facingAngle, this.dead ? 0.6 : this.visualScale);
+  }
 
   public setPosition(x: number, y: number): void {
     this.node.setPosition(x, y, 0);
