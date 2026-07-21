@@ -130,7 +130,9 @@ export const parsePlayerAppearanceConfig = (value: unknown): PlayerAppearanceCon
     requirePositive(config[key], `player appearance ${key}`);
     if (!Number.isInteger(config[key])) throw new Error(`player appearance ${key} must be an integer`);
   }
-  requirePositive(config.swimFrameDurationSeconds, 'player appearance swimFrameDurationSeconds');
+  if (typeof config.swimFrameDurationSeconds !== 'number' || !Number.isFinite(config.swimFrameDurationSeconds) || config.swimFrameDurationSeconds <= 0) {
+    throw new Error('player appearance swimFrameDurationSeconds must be a positive number');
+  }
   if (config.swimFrameDurationSeconds > 1) throw new Error('player appearance swimFrameDurationSeconds must not exceed 1');
   return config as unknown as PlayerAppearanceConfig;
 };

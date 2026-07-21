@@ -27,6 +27,7 @@ const required = [
   'assets/scripts/cocos/Player.ts',
   'assets/scripts/cocos/LocalPlayer.ts',
   'assets/scripts/cocos/MainUIManager.ts',
+  'assets/scripts/cocos/AnimationsResManager.ts',
   'assets/scripts/cocos/TransformDialog.ts',
   'assets/scripts/platform/PlatformService.ts',
   'assets/scripts/platform/PlatformServiceEditor.ts',

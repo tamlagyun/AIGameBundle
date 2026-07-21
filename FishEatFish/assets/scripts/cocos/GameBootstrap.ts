@@ -24,34 +24,26 @@ import {
   view,
   tween
 } from 'cc';
-import { moveWithinBounds, shouldFlipArtFrame } from '../core/MovementSystem.ts';
-import type { ArtFacingDirection, PlayerAppearanceConfig, SkillConfig, Vec2Value } from '../core/types.ts';
+import { moveWithinBounds } from '../core/MovementSystem.ts';
+import type { SkillConfig, Vec2Value } from '../core/types.ts';
 import { parseAppearanceLibraryConfig, parseFishConfig, parsePlayerAppearanceConfig, parseSkillConfig, parseSkillLibraryConfig, parseSkillLoadoutConfig } from '../data/ConfigValidator.ts';
 import { SkillCatalog } from '../data/SkillCatalog.ts';
 import { createPlatformService } from '../platform/PlatformAdapters.ts';
 import { RealtimeSession } from '../network/RealtimeSession.ts';
 import { RemotePlayerRegistry } from '../network/RemotePlayerRegistry.ts';
-import { resolveNetworkEndpoint } from '../network/NetworkEnvironment.ts';
 import type { AppearanceChanged, AppearanceId, NetworkMessage, RemotePlayerState, SkillEffect, SkillResolved, PlayerDamaged, PlayerDied, PlayerRespawned, CombatSettlement, SkillId } from '../network/NetworkProtocol.ts';
 import { SkillActionPanel } from './SkillActionPanel.ts';
 import { SkillEffectExecutor } from './SkillEffectExecutor.ts';
 import { FishHealthBarOverlay } from './FishHealthBarOverlay.ts';
 import { FishNameOverlay } from './FishNameOverlay.ts';
-import { LoginDialog } from './LoginDialog.ts';
+import { LoginFlowController } from './LoginFlowController.ts';
 import { RoleManager } from './RoleManager.ts';
 import { LocalPlayer } from './LocalPlayer.ts';
 import { Player } from './Player.ts';
 import { MainUIManager } from './MainUIManager.ts';
+import { AnimationsResManager } from './AnimationsResManager.ts';
 
 const { ccclass } = _decorator;
-
-interface AppearanceRuntimeAssets {
-  config: PlayerAppearanceConfig;
-  portrait: ImageAsset;
-  swimFrames: SpriteFrame[];
-  attackFrames: SpriteFrame[];
-  hurtFrames: SpriteFrame[];
-}
 
 @ccclass('GameBootstrap')
 export class GameBootstrap extends Component {
@@ -65,7 +57,7 @@ export class GameBootstrap extends Component {
   private removeResumeListener?: () => void;
   private localPlayer?: LocalPlayer;
   private roleManager?: RoleManager;
-  private artFacingDirection!: ArtFacingDirection;
+  private animationsResManager?: AnimationsResManager;
   private cameraNode?: Node;
   private hudRoot?: Node;
   private actionHint?: Label;
@@ -79,12 +71,6 @@ export class GameBootstrap extends Component {
   private skillExecutor?: SkillEffectExecutor;
   private joystickKnob?: Node;
   private joystickNode?: Node;
-  private swimFrames: SpriteFrame[] = [];
-  private biteFrames: SpriteFrame[] = [];
-  private hurtFrames: SpriteFrame[] = [];
-  private readonly appearanceAssets = new Map<string, AppearanceRuntimeAssets>();
-  private currentAppearanceId: AppearanceId = 'appearance-crucian';
-  private currentSwimFrameDurationSeconds = 0.22;
   private healthBarFrame?: SpriteFrame;
   private healthBarFill?: SpriteFrame;
   private readonly remoteAnimationTokens = new WeakMap<Sprite, number>();
@@ -112,8 +98,7 @@ export class GameBootstrap extends Component {
   private connectionDetail = '';
   private offlineModeSelected = false;
   private isDestroying = false;
-  private loginDialog?: LoginDialog;
-  private testUsername = '';
+  private loginFlow?: LoginFlowController;
 
   protected async start(): Promise<void> {
     view.setDesignResolutionSize(1280, 720, ResolutionPolicy.SHOW_ALL);
@@ -123,7 +108,19 @@ export class GameBootstrap extends Component {
     this.removeResumeListener = platform.onResume(() => this.node.resumeSystemEvents(true));
     await this.createOceanWorld();
     this.bindInput();
-    this.showTestLoginDialog();
+    this.loginFlow = new LoginFlowController({
+      getInputLayer: () => this.mainUi?.inputLayer,
+      realtime: this.realtime,
+      onValidationError: () => { if (this.actionHint) this.actionHint.string = '请输入用户名'; },
+      onUsernameAccepted: (username) => {
+        this.setFishName('local-player', username);
+      },
+      onMessage: (message) => this.handleNetworkMessage(message),
+      onDiagnostic: (detail) => this.setConnectionDiagnostic(detail),
+      onConnected: () => { this.hideConnectionDialog(); if (this.actionHint) this.actionHint.string = '已连接默认海域'; },
+      onConnectionLost: (reason) => this.showConnectionDialog(reason)
+    });
+    this.loginFlow.openTestEnvironment();
   }
 
   protected onDestroy(): void {
@@ -131,18 +128,19 @@ export class GameBootstrap extends Component {
     this.unbindInput();
     this.removePauseListener?.();
     this.removeResumeListener?.();
-    this.realtime.close();
     this.remotePlayers?.clear();
     this.roleManager?.clear();
     this.roleManager = undefined;
+    this.animationsResManager?.clear();
+    this.animationsResManager = undefined;
     this.remoteSwimStates.clear();
     this.localWhaleTargetSequences.clear();
     for (const display of this.fishHealthDisplays.values()) display.destroy();
     for (const display of this.fishNameDisplays.values()) display.destroy();
     this.fishHealthDisplays.clear();
     this.fishNameDisplays.clear();
-    this.loginDialog?.close();
-    this.loginDialog = undefined;
+    this.loginFlow?.close();
+    this.loginFlow = undefined;
   }
 
   protected update(deltaTime: number): void {
@@ -151,7 +149,7 @@ export class GameBootstrap extends Component {
     this.skillPanel?.update(deltaTime);
     this.updateFishAction(deltaTime);
     this.advanceRemoteSwimAnimations(deltaTime);
-    if (this.loginDialog?.isOpen) { this.updateFishHealthDisplays(); return; }
+    if (this.loginFlow?.isDialogOpen) { this.updateFishHealthDisplays(); return; }
     if (localPlayer.dead) { this.updateFishHealthDisplays(); return; }
 
     const keyboard = this.readKeyboardDirection();
@@ -225,31 +223,11 @@ export class GameBootstrap extends Component {
     ]);
     const [backgroundImage, joystickBase, joystickKnob, healthBarFrame, healthBarFill, skillEntryImage, transformEntryImage, ...skillImageAssets] = images;
     allSkills.forEach((skill, index) => skillImages.set(skill.id, skillImageAssets[index] as ImageAsset));
-    const appearancePortraits = new Map<string, ImageAsset>();
-    for (const config of appearances) {
-      const [portrait, ...animationImages] = await Promise.all([
-        this.loadImage(config.portraitPath),
-        ...Array.from({ length: config.swimFrameCount }, (_, index) => this.loadImage(`${config.resourceRoot}/${config.animationPrefixes.swim}-${index}`)),
-        ...Array.from({ length: config.attackFrameCount }, (_, index) => this.loadImage(`${config.resourceRoot}/${config.animationPrefixes.attack}-${index}`)),
-        ...Array.from({ length: config.hurtFrameCount }, (_, index) => this.loadImage(`${config.resourceRoot}/${config.animationPrefixes.hurt}-${index}`))
-      ]);
-      const swimImages = animationImages.slice(0, config.swimFrameCount);
-      const attackImages = animationImages.slice(config.swimFrameCount, config.swimFrameCount + config.attackFrameCount);
-      const hurtImages = animationImages.slice(config.swimFrameCount + config.attackFrameCount);
-      const assets: AppearanceRuntimeAssets = {
-        config,
-        portrait,
-        swimFrames: swimImages.map((image) => this.createFishSpriteFrame(image, config.animationArtFacingDirections.swim, config.artFacingDirection)),
-        attackFrames: attackImages.map((image) => this.createFishSpriteFrame(image, config.animationArtFacingDirections.attack, config.artFacingDirection)),
-        hurtFrames: hurtImages.map((image) => this.createFishSpriteFrame(image, config.animationArtFacingDirections.hurt, config.artFacingDirection))
-      };
-      this.appearanceAssets.set(config.id, assets);
-      appearancePortraits.set(config.id, portrait);
-    }
-    const defaultAppearance = this.appearanceAssets.get(appearanceLibrary.defaultAppearanceId);
-    if (!defaultAppearance) throw new Error(`默认形象资源不存在：${appearanceLibrary.defaultAppearanceId}`);
+    this.animationsResManager = new AnimationsResManager(appearanceLibrary.defaultAppearanceId);
+    await this.animationsResManager.load(appearances);
+    const defaultAppearance = this.animationsResManager.defaultResources;
+    const appearancePortraits = this.animationsResManager.getPortraits();
     if (playerFishConfig.artFacingDirection !== defaultAppearance.config.artFacingDirection) throw new Error('玩家鱼与默认形象美术方向不一致');
-    this.artFacingDirection = defaultAppearance.config.artFacingDirection;
 
     const background = new Node('OceanMap');
     background.layer = worldRoot.layer;
@@ -261,7 +239,6 @@ export class GameBootstrap extends Component {
     worldRoot.addChild(background);
     background.setSiblingIndex(0);
 
-    this.useLocalAppearanceAssets(defaultAppearance);
     this.healthBarFrame = this.createSpriteFrame(healthBarFrame);
     this.healthBarFill = this.createSpriteFrame(healthBarFill);
     this.mainUi = new MainUIManager({
@@ -289,13 +266,13 @@ export class GameBootstrap extends Component {
     this.joystickNode = this.mainUi.joystickRoot;
     this.joystickKnob = this.mainUi.joystickKnob;
     this.skillPanel = this.mainUi.skillPanel;
-    const selectedAppearance = this.getAppearanceAssets(this.mainUi.selectedAppearanceId);
-    this.useLocalAppearanceAssets(selectedAppearance);
-    this.currentAppearanceId = selectedAppearance.config.id as AppearanceId;
-    this.roleManager = new RoleManager(playerLayer, this.swimFrames[0], this.artFacingDirection);
+    const selectedAppearance = this.animationsResManager.select(this.mainUi.selectedAppearanceId).resources;
+    this.swimFrameIndex = 0;
+    this.animationElapsed = 0;
+    this.roleManager = new RoleManager(playerLayer, selectedAppearance.swimFrames[0], selectedAppearance.config.artFacingDirection);
     const localRole = this.roleManager.createLocalPlayer();
     this.localPlayer = localRole;
-    localRole.setAppearance(this.currentAppearanceId, this.swimFrames[0] ?? null, this.artFacingDirection);
+    localRole.setAppearance(selectedAppearance.config.id, selectedAppearance.swimFrames[0] ?? null, selectedAppearance.config.artFacingDirection);
     localRole.setFacing(180);
     this.createFishHealthDisplay('local-player', localRole.node, localRole.health, localRole.maxHealth);
     this.createFishNameDisplay('local-player', localRole.node, '');
@@ -305,30 +282,15 @@ export class GameBootstrap extends Component {
     this.updateHealthHud();
   }
 
-  private getAppearanceAssets(appearanceId: string | undefined): AppearanceRuntimeAssets {
-    return this.appearanceAssets.get(appearanceId ?? '')
-      ?? this.appearanceAssets.get('appearance-crucian')
-      ?? [...this.appearanceAssets.values()][0]
-      ?? (() => { throw new Error('没有可用的玩家形象资源'); })();
-  }
-
-  private useLocalAppearanceAssets(assets: AppearanceRuntimeAssets): void {
-    this.artFacingDirection = assets.config.artFacingDirection;
-    this.swimFrames = assets.swimFrames;
-    this.biteFrames = assets.attackFrames;
-    this.hurtFrames = assets.hurtFrames;
-    this.currentSwimFrameDurationSeconds = assets.config.swimFrameDurationSeconds;
-    this.swimFrameIndex = 0;
-    this.animationElapsed = 0;
-  }
-
   private applyLocalAppearance(appearanceId: string, syncToServer: boolean): void {
-    const assets = this.getAppearanceAssets(appearanceId);
+    const manager = this.requireAnimationsResManager();
+    const selection = manager.select(appearanceId);
+    const assets = selection.resources;
     const nextId = assets.config.id as AppearanceId;
-    const changed = this.currentAppearanceId !== nextId || this.localPlayer?.appearanceId !== nextId;
-    this.currentAppearanceId = nextId;
+    const changed = selection.changed || this.localPlayer?.appearanceId !== nextId;
     if (changed) {
-      this.useLocalAppearanceAssets(assets);
+      this.swimFrameIndex = 0;
+      this.animationElapsed = 0;
       if (this.localPlayer) {
         this.fishActionState = 'swim';
         this.fishActionElapsed = 0;
@@ -340,13 +302,19 @@ export class GameBootstrap extends Component {
     if (syncToServer && !this.offlineModeSelected) this.realtime.sendAppearance(nextId);
   }
 
+  private requireAnimationsResManager(): AnimationsResManager {
+    if (!this.animationsResManager) throw new Error('玩家动作资源管理器尚未初始化');
+    return this.animationsResManager;
+  }
+
   private createRemotePlayerView(state: RemotePlayerState) {
     const roleManager = this.roleManager;
     if (!roleManager) throw new Error('RoleManager 尚未初始化。');
     const role = roleManager.createRemotePlayer(state.playerId);
     const node = role.node;
     const sprite = role.sprite;
-    let appearance = this.getAppearanceAssets(state.appearanceId);
+    const animations = this.requireAnimationsResManager();
+    let appearance = animations.get(state.appearanceId);
     role.setAppearance(appearance.config.id, appearance.swimFrames[0] ?? null, appearance.config.artFacingDirection);
     this.remoteSwimStates.set(sprite, { frameIndex: 0, elapsed: 0, active: true, frames: appearance.swimFrames, frameDuration: appearance.config.swimFrameDurationSeconds });
     role.setFacing(state.rotation);
@@ -359,7 +327,7 @@ export class GameBootstrap extends Component {
       setRotation: (angle: number) => role.setFacing(angle),
       setAppearance: (appearanceId: AppearanceId) => {
         if (role.appearanceId === appearanceId) return;
-        appearance = this.getAppearanceAssets(appearanceId);
+        appearance = animations.get(appearanceId);
         this.remoteAnimationTokens.set(sprite, (this.remoteAnimationTokens.get(sprite) ?? 0) + 1);
         const swimState = this.remoteSwimStates.get(sprite);
         if (swimState) {
@@ -560,55 +528,7 @@ export class GameBootstrap extends Component {
     for (const display of this.fishNameDisplays.values()) display.updatePosition(overlayTransform);
   }
 
-  private async connectOnline(username = this.testUsername): Promise<void> {
-    if (this.offlineModeSelected || this.isDestroying) return;
-    try {
-      const endpoint = resolveNetworkEndpoint();
-      const baseUrl = endpoint.httpBaseUrl;
-      const runtime = typeof window !== 'undefined' ? window.location.href : 'no-window-runtime';
-      this.setConnectionDiagnostic(`runtime=${runtime}\nHTTP=${baseUrl}`);
-      const authResponse = await fetch(`${baseUrl}/auth/test-login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username }) });
-      if (!authResponse.ok) throw new Error(`AUTH_FAILED status=${authResponse.status}`);
-      const auth = await authResponse.json() as { token: string };
-      const matchResponse = await fetch(`${baseUrl}/match/join`, { method: 'POST', headers: { authorization: `Bearer ${auth.token}`, 'content-type': 'application/json' }, body: JSON.stringify({ mapId: 'sea-default-001' }) });
-      if (!matchResponse.ok) throw new Error(`MATCH_FAILED status=${matchResponse.status}`);
-      this.realtime.onMessage = (message) => this.handleNetworkMessage(message);
-      this.realtime.onDiagnostic = (detail) => this.setConnectionDiagnostic(detail);
-      this.realtime.onStatus = (status) => {
-        if (status === 'open') { this.realtime.join(); this.hideConnectionDialog(); }
-        if ((status === 'error' || status === 'closed') && !this.isDestroying && !this.offlineModeSelected) this.showConnectionDialog('在线服务连接已断开');
-      };
-      this.realtime.connect(endpoint.websocketUrl, auth.token);
-      if (this.actionHint) this.actionHint.string = '已连接默认海域';
-    } catch (error) { this.setConnectionDiagnostic(`Connection failed: ${error instanceof Error ? error.message : String(error)}`); this.showConnectionDialog('无法连接在线服务'); }
-  }
-
   private setConnectionDiagnostic(detail: string): void { this.connectionDetail = detail; console.warn(`[FishEatFish] ${detail}`); if (this.connectionDetailLabel) this.connectionDetailLabel.string = detail; }
-
-  private showTestLoginDialog(): void {
-    const inputLayer = this.mainUi?.inputLayer;
-    if (!inputLayer) return;
-    if (this.loginDialog?.isOpen) return;
-    const isEditorPreview = typeof window !== 'undefined' && window.location.hostname === 'scene';
-    this.loginDialog = LoginDialog.open({
-      variant: 'test-environment',
-      presentation: isEditorPreview || typeof document === 'undefined' ? 'cocos' : 'dom',
-      parent: inputLayer,
-      title: '测试环境登录',
-      description: '输入用户名后进入默认海域',
-      placeholder: '用户名（1-16 个字符）',
-      submitText: '进入海域',
-      initialUsername: this.testUsername,
-      maxLength: 16,
-      onValidationError: () => { if (this.actionHint) this.actionHint.string = '请输入用户名'; },
-      onSubmit: (username) => {
-        this.testUsername = username;
-        this.setFishName('local-player', username);
-        this.loginDialog = undefined;
-        void this.connectOnline(username);
-      }
-    });
-  }
 
   private showConnectionDialog(reason: string): void {
     if (this.offlineModeSelected || this.isDestroying) return;
@@ -624,8 +544,8 @@ export class GameBootstrap extends Component {
     title.name = 'ConnectionTitle';
     this.createDialogLabel(panel, '可继续尝试连接，或进入本地单机模式。', 20, new Color(230, 245, 255, 255), 0, 30);
     const detailNode = this.createDialogLabel(panel, this.connectionDetail || reason, 14, new Color(180, 225, 255, 255), 0, -18); const detailLabel = detailNode.getComponent(Label); if (detailLabel) { detailLabel.overflow = Label.Overflow.SHRINK; this.connectionDetailLabel = detailLabel; }
-    const retry = this.createDialogButton(panel, '重新连接', -115, -112, () => { this.hideConnectionDialog(); this.realtime.close(); void this.connectOnline(); });
-    const offline = this.createDialogButton(panel, '本地单机游玩', 115, -112, () => { this.offlineModeSelected = true; this.realtime.close(); this.hideConnectionDialog(); if (this.actionHint) this.actionHint.string = '当前为本地单机模式'; });
+    const retry = this.createDialogButton(panel, '重新连接', -115, -112, () => { this.hideConnectionDialog(); this.loginFlow?.retry(); });
+    const offline = this.createDialogButton(panel, '本地单机游玩', 115, -112, () => { this.offlineModeSelected = true; this.loginFlow?.selectOffline(); this.hideConnectionDialog(); if (this.actionHint) this.actionHint.string = '当前为本地单机模式'; });
     retry.name = 'RetryConnectionButton'; offline.name = 'OfflineModeButton'; this.connectionDialog = dialog;
   }
 
@@ -648,7 +568,7 @@ export class GameBootstrap extends Component {
       this.applyRemotePlayers(snapshot.players);
       if (self) {
         this.applyLocalSnapshotAction(self);
-        this.realtime.sendAppearance(this.currentAppearanceId);
+        this.realtime.sendAppearance(this.requireAnimationsResManager().currentResources.config.id as AppearanceId);
       }
     } else if (message.type === 'stateSnapshot') {
       const snapshot = message.payload as { players: RemotePlayerState[] };
@@ -890,22 +810,24 @@ export class GameBootstrap extends Component {
     this.fishActionState = state;
     this.fishActionElapsed = 0;
     this.fishActionDuration = duration;
-    const frames = state === 'hurt' ? this.hurtFrames : this.biteFrames;
+    const resources = this.requireAnimationsResManager().currentResources;
+    const frames = state === 'hurt' ? resources.hurtFrames : resources.attackFrames;
     if (this.localPlayer && frames.length > 0) this.localPlayer.setFrame(frames[0]);
   }
 
   private updateFishAction(deltaTime: number): void {
     if (!this.localPlayer || this.fishActionState === 'swim') return;
+    const resources = this.requireAnimationsResManager().currentResources;
     this.fishActionElapsed += deltaTime;
     const progress = Math.min(1, this.fishActionElapsed / this.fishActionDuration);
-    const frames = this.fishActionState === 'hurt' ? this.hurtFrames : this.biteFrames;
+    const frames = this.fishActionState === 'hurt' ? resources.hurtFrames : resources.attackFrames;
     const index = Math.min(frames.length - 1, Math.floor(progress * frames.length));
-    if (index >= 0) this.localPlayer.setFrame(frames[index] ?? this.swimFrames[this.swimFrameIndex]);
+    if (index >= 0) this.localPlayer.setFrame(frames[index] ?? resources.swimFrames[this.swimFrameIndex]);
     if (progress >= 1) {
       this.fishActionState = 'swim';
       this.fishActionElapsed = 0;
       this.fishActionDuration = 0;
-      this.localPlayer.setFrame(this.swimFrames[this.swimFrameIndex] ?? null);
+      this.localPlayer.setFrame(resources.swimFrames[this.swimFrameIndex] ?? null);
     }
   }
 
@@ -1072,13 +994,14 @@ export class GameBootstrap extends Component {
   }
 
   private advanceSwimAnimation(deltaTime: number, moving: boolean): void {
-    if (!this.localPlayer || this.swimFrames.length === 0 || this.fishActionState !== 'swim') return;
+    const resources = this.requireAnimationsResManager().currentResources;
+    if (!this.localPlayer || resources.swimFrames.length === 0 || this.fishActionState !== 'swim') return;
     this.animationElapsed += deltaTime;
-    const frameDuration = moving ? Math.min(0.11, this.currentSwimFrameDurationSeconds) : this.currentSwimFrameDurationSeconds;
+    const frameDuration = moving ? Math.min(0.11, resources.config.swimFrameDurationSeconds) : resources.config.swimFrameDurationSeconds;
     while (this.animationElapsed >= frameDuration) {
       this.animationElapsed -= frameDuration;
-      this.swimFrameIndex = (this.swimFrameIndex + 1) % this.swimFrames.length;
-      this.localPlayer.setFrame(this.swimFrames[this.swimFrameIndex]);
+      this.swimFrameIndex = (this.swimFrameIndex + 1) % resources.swimFrames.length;
+      this.localPlayer.setFrame(resources.swimFrames[this.swimFrameIndex]);
     }
   }
 
@@ -1118,9 +1041,4 @@ export class GameBootstrap extends Component {
     return spriteFrame;
   }
 
-  private createFishSpriteFrame(image: ImageAsset, sourceFacingDirection: ArtFacingDirection, targetFacingDirection: ArtFacingDirection): SpriteFrame {
-    const spriteFrame = this.createSpriteFrame(image);
-    spriteFrame.flipUVX = shouldFlipArtFrame(sourceFacingDirection, targetFacingDirection);
-    return spriteFrame;
-  }
 }

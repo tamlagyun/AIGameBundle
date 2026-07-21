@@ -11,6 +11,7 @@
 ## 运行规则
 
 - 本地选择通过 `AppearanceStore` 保存，存储格式版本为 `1`。
+- `AnimationsResManager` 统一加载和缓存所有形态的标准图、游动、攻击与受击帧，负责按配置归一原图方向，并提供当前形态和指定远端形态的资源集合；`GameBootstrap` 不再拼接玩家动作资源路径或持有多套帧数组。
 - 变身只更换游动、攻击和受击表现，不改变账号、位置、生命、等级、碰撞体或已装备技能。
 - 进入多人房间后，客户端发送 `appearance` 消息；服务器保存并广播 `appearanceChanged`。
 - `roomSnapshot`、`stateSnapshot` 和 `stateCorrection` 均携带 `appearanceId`，新加入玩家也能恢复房间内其他玩家的正确形态。

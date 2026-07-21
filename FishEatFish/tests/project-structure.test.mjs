@@ -74,9 +74,17 @@ test('鲸吞按钮加载独立正式位图而不改变既有技能区布局', ()
 test('参数化登录组件保持在 HUD 输入层并统一 IDE 与 Web 的登录参数', () => {
   const source = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
   const dialog = readFileSync(fromRoot('assets/scripts/cocos/LoginDialog.ts'), 'utf8');
-  assert.match(source, /new LoginDialog|LoginDialog\.open/);
-  assert.match(source, /variant: 'test-environment'/);
-  assert.match(source, /this\.mainUi\?\.inputLayer/);
+  const flow = readFileSync(fromRoot('assets/scripts/cocos/LoginFlowController.ts'), 'utf8');
+  assert.match(source, /new LoginFlowController\(/);
+  assert.match(source, /getInputLayer: \(\) => this\.mainUi\?\.inputLayer/);
+  assert.match(flow, /LoginDialog\.open/);
+  assert.match(flow, /variant: 'test-environment'/);
+  assert.match(flow, /getInputLayer/);
+  assert.match(flow, /resolveNetworkEndpoint/);
+  assert.match(flow, /auth\/test-login/);
+  assert.match(flow, /match\/join/);
+  assert.match(flow, /realtime\.connect/);
+  assert.doesNotMatch(source, /connectOnline\(/);
   assert.match(dialog, /export interface LoginDialogOptions/);
   assert.match(dialog, /presentation: LoginDialogPresentation/);
   assert.match(dialog, /EditBox\.InputMode\.SINGLE_LINE/);
@@ -174,7 +182,7 @@ test('RoleManager 统一创建和移除本地与远端玩家对象', () => {
   const roles = readFileSync(fromRoot('assets/scripts/cocos/RoleManager.ts'), 'utf8');
   const player = readFileSync(fromRoot('assets/scripts/cocos/Player.ts'), 'utf8');
   const local = readFileSync(fromRoot('assets/scripts/cocos/LocalPlayer.ts'), 'utf8');
-  assert.match(bootstrap, /new RoleManager\(playerLayer, this\.swimFrames\[0\], this\.artFacingDirection\)/);
+  assert.match(bootstrap, /new RoleManager\(playerLayer, selectedAppearance\.swimFrames\[0\], selectedAppearance\.config\.artFacingDirection\)/);
   assert.match(bootstrap, /this\.roleManager\.createLocalPlayer\(\)/);
   assert.match(bootstrap, /roleManager\.createRemotePlayer\(state\.playerId\)/);
   assert.match(bootstrap, /roleManager\.remove\(state\.playerId\)/);
@@ -193,10 +201,12 @@ test('RoleManager 统一创建和移除本地与远端玩家对象', () => {
 
 test('鱼动画原图方向由配置归一，节点翻转只读取统一美术方向', () => {
   const source = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const resources = readFileSync(fromRoot('assets/scripts/cocos/AnimationsResManager.ts'), 'utf8');
   const player = readFileSync(fromRoot('assets/scripts/cocos/Player.ts'), 'utf8');
   assert.match(source, /this\.loadJson\('configs\/fish-player'\)/);
   assert.match(source, /const playerFishConfig = parseFishConfig\(playerFishConfigRaw\)/);
-  assert.match(source, /spriteFrame\.flipUVX = shouldFlipArtFrame\(sourceFacingDirection, targetFacingDirection\)/);
+  assert.match(resources, /frame\.flipUVX = shouldFlipArtFrame\(sourceFacingDirection, targetFacingDirection\)/);
+  assert.doesNotMatch(source, /shouldFlipArtFrame|createFishSpriteFrame/);
   assert.match(player, /horizontalScaleForFacing\(this\.facingAngle, this\.artFacingDirection, scale\)/);
 });
 
@@ -258,13 +268,14 @@ test('远端鱼儿待机时循环播放游泳帧，动作和死亡期间暂停�
   assert.match(source, /this\.advanceRemoteSwimAnimations\(deltaTime\)/);
   assert.match(source, /state\.frameIndex = \(state\.frameIndex \+ 1\) % state\.frames\.length/);
   assert.match(source, /state\.elapsed >= state\.frameDuration/);
-  assert.match(source, /moving \? Math\.min\(0\.11, this\.currentSwimFrameDurationSeconds\) : this\.currentSwimFrameDurationSeconds/);
+  assert.match(source, /moving \? Math\.min\(0\.11, resources\.config\.swimFrameDurationSeconds\) : resources\.config\.swimFrameDurationSeconds/);
   assert.match(source, /swimState\.active = false/);
   assert.match(source, /swimState\.active = true/);
 });
 
 test('右上变身入口、形态存档和多人 appearanceId 使用配置驱动', () => {
   const bootstrap = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const animations = readFileSync(fromRoot('assets/scripts/cocos/AnimationsResManager.ts'), 'utf8');
   const mainUi = readFileSync(fromRoot('assets/scripts/cocos/MainUIManager.ts'), 'utf8');
   const dialog = readFileSync(fromRoot('assets/scripts/cocos/TransformDialog.ts'), 'utf8');
   const store = readFileSync(fromRoot('assets/scripts/data/AppearanceStore.ts'), 'utf8');
@@ -272,7 +283,7 @@ test('右上变身入口、形态存档和多人 appearanceId 使用配置驱动
   const serverRoom = readFileSync(fromRoot('server/src/room/room.ts'), 'utf8');
   assert.match(bootstrap, /loadJson\('configs\/appearance-library-player'\)/);
   assert.match(bootstrap, /loadImage\('art\/ui\/transform-entry'\)/);
-  assert.match(bootstrap, /appearance\.attackFrames/);
+  assert.match(animations, /attackFrames:/);
   assert.match(mainUi, /new AppearanceStore\(/);
   assert.match(mainUi, /new TransformDialog\(/);
   assert.match(dialog, /'TransformEntryRoot'/);
@@ -284,11 +295,27 @@ test('右上变身入口、形态存档和多人 appearanceId 使用配置驱动
 
 test('重复的服务器形态快照不会重置本地待机动画计时', () => {
   const source = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const animations = readFileSync(fromRoot('assets/scripts/cocos/AnimationsResManager.ts'), 'utf8');
   const start = source.indexOf('private applyLocalAppearance');
   const end = source.indexOf('private createRemotePlayerView', start);
   const branch = source.slice(start, end);
-  assert.match(branch, /if \(changed\) \{[\s\S]*this\.useLocalAppearanceAssets\(assets\)/);
-  assert.doesNotMatch(branch.slice(0, branch.indexOf('if (changed)')), /useLocalAppearanceAssets/);
+  assert.match(branch, /const changed = selection\.changed \|\| this\.localPlayer\?\.appearanceId !== nextId/);
+  assert.match(branch, /if \(changed\) \{[\s\S]*this\.animationElapsed = 0/);
+  assert.match(animations, /const changed = this\.selectedAppearanceId !== next\.config\.id/);
+  assert.match(animations, /if \(changed\) this\.selectedAppearanceId = next\.config\.id/);
+});
+
+test('AnimationsResManager 独立管理玩家形态动作资源', () => {
+  const bootstrap = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const animations = readFileSync(fromRoot('assets/scripts/cocos/AnimationsResManager.ts'), 'utf8');
+  assert.match(bootstrap, /new AnimationsResManager\(appearanceLibrary\.defaultAppearanceId\)/);
+  assert.match(bootstrap, /await this\.animationsResManager\.load\(appearances\)/);
+  assert.match(animations, /resourcesByAppearance/);
+  assert.match(animations, /config\.animationPrefixes\.swim/);
+  assert.match(animations, /config\.animationPrefixes\.attack/);
+  assert.match(animations, /config\.animationPrefixes\.hurt/);
+  assert.match(animations, /getPortraits\(\)/);
+  assert.doesNotMatch(bootstrap, /config\.animationPrefixes|resourcesByAppearance/);
 });
 
 test('技能区域以普攻为圆心并从左向上形成扇形槽位', () => {
