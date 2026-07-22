@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const fromRoot = (...parts) => join(root, ...parts);
+const readGameRuntime = () => readFileSync(fromRoot('assets/scripts/runtime/GameRuntime.ts'), 'utf8');
 
 test('Cocos 3.8.8 工程骨架和中文档案存在', () => {
   const required = [
@@ -43,10 +44,10 @@ test('Canvas 下的世界与 HUD 根节点共用中心原点，HUD 只同步相�
     assert.equal(node._lpos.y, 0);
   }
 
-  const source = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
-  assert.match(source, /this\.hudRoot\.setPosition\(0, 0, 0\)/);
-  assert.match(source, /this\.hudRoot\.setPosition\(cameraX, cameraY, 0\)/);
-  assert.doesNotMatch(source, /this\.hudRoot\.setPosition\(cameraX - 640, cameraY - 360, 0\)/);
+  const source = readFileSync(fromRoot('assets/scripts/runtime/SceneManager.ts'), 'utf8');
+  assert.match(source, /hudRoot\.setPosition\(0, 0, 0\)/);
+  assert.match(source, /hudRoot\.setPosition\(cameraX, cameraY, 0\)/);
+  assert.doesNotMatch(source, /hudRoot\.setPosition\(cameraX - 640, cameraY - 360, 0\)/);
 });
 
 test('Agent 规则锁定需求存档、美术审批和卫生检查', () => {
@@ -60,7 +61,7 @@ test('Agent 规则锁定需求存档、美术审批和卫生检查', () => {
 });
 
 test('鲸吞按钮加载独立正式位图而不改变既有技能区布局', () => {
-  const source = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const source = readGameRuntime();
   const loadout = readFileSync(fromRoot('assets/resources/configs/skill-loadout-player.json'), 'utf8');
   const whale = readFileSync(fromRoot('assets/resources/configs/skill-whale-swallow.json'), 'utf8');
   const mainUi = readFileSync(fromRoot('assets/scripts/cocos/MainUIManager.ts'), 'utf8');
@@ -72,7 +73,7 @@ test('鲸吞按钮加载独立正式位图而不改变既有技能区布局', ()
 });
 
 test('参数化登录组件保持在 HUD 输入层并统一 IDE 与 Web 的登录参数', () => {
-  const source = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const source = readGameRuntime();
   const dialog = readFileSync(fromRoot('assets/scripts/cocos/LoginDialog.ts'), 'utf8');
   const flow = readFileSync(fromRoot('assets/scripts/cocos/LoginFlowController.ts'), 'utf8');
   assert.match(source, /new LoginFlowController\(/);
@@ -95,11 +96,11 @@ test('参数化登录组件保持在 HUD 输入层并统一 IDE 与 Web 的登�
 });
 
 test('MainUIManager owns fixed large-world HUD node creation', () => {
-  const bootstrap = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const bootstrap = readGameRuntime();
   const mainUi = readFileSync(fromRoot('assets/scripts/cocos/MainUIManager.ts'), 'utf8');
   assert.match(bootstrap, /this\.mainUi = new MainUIManager\(/);
   assert.match(bootstrap, /this\.fishHealthOverlay = this\.mainUi\.fishHealthOverlay/);
-  assert.match(bootstrap, /this\.joystickNode = this\.mainUi\.joystickRoot/);
+  assert.match(bootstrap, /this\.playerInput\.setJoystickKnob\(this\.mainUi\.joystickKnob\)/);
   assert.match(mainUi, /getChildByName\('SafeAreaRoot'\)\?\.getChildByName\('InputLayer'\)/);
   assert.match(mainUi, /createContainer\(this\.inputLayer, 'FishHealthOverlay', 1280, 720, 0\.5, 0\.5\)/);
   assert.match(mainUi, /this\.alignToBottomLeft\(this\.joystickRoot, 60, 35\)/);
@@ -107,7 +108,7 @@ test('MainUIManager owns fixed large-world HUD node creation', () => {
 });
 
 test('右上技能入口打开技能配置界面并通过技能库替换四个槽位', () => {
-  const bootstrap = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const bootstrap = readGameRuntime();
   const mainUi = readFileSync(fromRoot('assets/scripts/cocos/MainUIManager.ts'), 'utf8');
   const dialog = readFileSync(fromRoot('assets/scripts/cocos/SkillLoadoutDialog.ts'), 'utf8');
   const panel = readFileSync(fromRoot('assets/scripts/cocos/SkillActionPanel.ts'), 'utf8');
@@ -170,7 +171,7 @@ test('死亡翻滚使用局部 X 轴而不是 2D Z 轴角度', () => {
 });
 
 test('大王喷墨使用泼洒墨团而不是长方形墨柱', () => {
-  const bootstrap = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const bootstrap = readGameRuntime();
   const effect = bootstrap.slice(bootstrap.indexOf('private createInkSplashEffect'), bootstrap.indexOf('private bindActionButton'));
   assert.match(effect, /drawBlob/);
   assert.match(effect, /graphics\.circle/);
@@ -178,7 +179,7 @@ test('大王喷墨使用泼洒墨团而不是长方形墨柱', () => {
 });
 
 test('RoleManager 统一创建和移除本地与远端玩家对象', () => {
-  const bootstrap = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const bootstrap = readGameRuntime();
   const roles = readFileSync(fromRoot('assets/scripts/cocos/RoleManager.ts'), 'utf8');
   const player = readFileSync(fromRoot('assets/scripts/cocos/Player.ts'), 'utf8');
   const local = readFileSync(fromRoot('assets/scripts/cocos/LocalPlayer.ts'), 'utf8');
@@ -200,7 +201,7 @@ test('RoleManager 统一创建和移除本地与远端玩家对象', () => {
 });
 
 test('鱼动画原图方向由配置归一，节点翻转只读取统一美术方向', () => {
-  const source = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const source = readGameRuntime();
   const resources = readFileSync(fromRoot('assets/scripts/cocos/AnimationsResManager.ts'), 'utf8');
   const player = readFileSync(fromRoot('assets/scripts/cocos/Player.ts'), 'utf8');
   assert.match(source, /this\.loadJson\('configs\/fish-player'\)/);
@@ -211,7 +212,7 @@ test('鱼动画原图方向由配置归一，节点翻转只读取统一美术�
 });
 
 test('受击事件只切换翻肚动画帧，不修改目标位置', () => {
-  const source = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const source = readGameRuntime();
   const damagedStart = source.indexOf("message.type === 'playerDamaged'");
   const damagedEnd = source.indexOf("message.type === 'playerDied'", damagedStart);
   const damagedBranch = source.slice(damagedStart, damagedEnd);
@@ -222,12 +223,14 @@ test('受击事件只切换翻肚动画帧，不修改目标位置', () => {
 });
 
 test('鱼儿头顶血条、血量和用户名由独立 HUD Overlay 类管理', () => {
-  const source = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const source = readGameRuntime();
+  const overlayManager = readFileSync(fromRoot('assets/scripts/cocos/FishOverlayManager.ts'), 'utf8');
   const health = readFileSync(fromRoot('assets/scripts/cocos/FishHealthBarOverlay.ts'), 'utf8');
   const name = readFileSync(fromRoot('assets/scripts/cocos/FishNameOverlay.ts'), 'utf8');
-  assert.match(source, /new FishHealthBarOverlay\(/);
-  assert.match(source, /new FishNameOverlay\(/);
-  assert.match(source, /display\.updatePosition\(overlayTransform\)/);
+  assert.match(source, /new FishOverlayManager\(/);
+  assert.match(overlayManager, /new FishHealthBarOverlay\(/);
+  assert.match(overlayManager, /new FishNameOverlay\(/);
+  assert.match(overlayManager, /display\.updatePosition\(transform\)/);
   assert.match(health, /new Node\('HealthBarFrame'\)/);
   assert.match(health, /new Node\('HealthBarFill'\)/);
   assert.match(health, /this\.fill\.type = Sprite\.Type\.FILLED/);
@@ -263,7 +266,7 @@ test('远端技能动作使用服务器动作序号，并由状态快照补偿�
 });
 
 test('远端鱼儿待机时循环播放游泳帧，动作和死亡期间暂停后恢复', () => {
-  const source = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const source = readGameRuntime();
   assert.match(source, /remoteSwimStates\.set\(sprite, \{ frameIndex: 0, elapsed: 0, active: true, frames: appearance\.swimFrames, frameDuration: appearance\.config\.swimFrameDurationSeconds \}\)/);
   assert.match(source, /this\.advanceRemoteSwimAnimations\(deltaTime\)/);
   assert.match(source, /state\.frameIndex = \(state\.frameIndex \+ 1\) % state\.frames\.length/);
@@ -274,7 +277,7 @@ test('远端鱼儿待机时循环播放游泳帧，动作和死亡期间暂停�
 });
 
 test('右上变身入口、形态存档和多人 appearanceId 使用配置驱动', () => {
-  const bootstrap = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const bootstrap = readGameRuntime();
   const animations = readFileSync(fromRoot('assets/scripts/cocos/AnimationsResManager.ts'), 'utf8');
   const mainUi = readFileSync(fromRoot('assets/scripts/cocos/MainUIManager.ts'), 'utf8');
   const dialog = readFileSync(fromRoot('assets/scripts/cocos/TransformDialog.ts'), 'utf8');
@@ -294,7 +297,7 @@ test('右上变身入口、形态存档和多人 appearanceId 使用配置驱动
 });
 
 test('重复的服务器形态快照不会重置本地待机动画计时', () => {
-  const source = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const source = readGameRuntime();
   const animations = readFileSync(fromRoot('assets/scripts/cocos/AnimationsResManager.ts'), 'utf8');
   const start = source.indexOf('private applyLocalAppearance');
   const end = source.indexOf('private createRemotePlayerView', start);
@@ -306,7 +309,7 @@ test('重复的服务器形态快照不会重置本地待机动画计时', () =>
 });
 
 test('AnimationsResManager 独立管理玩家形态动作资源', () => {
-  const bootstrap = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const bootstrap = readGameRuntime();
   const animations = readFileSync(fromRoot('assets/scripts/cocos/AnimationsResManager.ts'), 'utf8');
   assert.match(bootstrap, /new AnimationsResManager\(appearanceLibrary\.defaultAppearanceId\)/);
   assert.match(bootstrap, /await this\.animationsResManager\.load\(appearances\)/);
@@ -358,7 +361,7 @@ test('四个技能按钮使用从十二点方向顺时针消退的独立径向�
 });
 
 test('鲸吞由服务器选择目标并同步三秒缩放与透明度表现', () => {
-  const client = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const client = readGameRuntime();
   const whaleConfig = readFileSync(fromRoot('assets/resources/configs/skill-whale-swallow.json'), 'utf8');
   const protocol = readFileSync(fromRoot('assets/scripts/network/NetworkProtocol.ts'), 'utf8');
   const combat = readFileSync(fromRoot('server/src/combat/combat-service.ts'), 'utf8');

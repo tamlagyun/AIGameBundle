@@ -1,0 +1,879 @@
+import {
+  BlockInputEvents,
+  Color,
+  ImageAsset,
+  Label,
+  Graphics,
+  Node,
+  ResolutionPolicy,
+  Sprite,
+  SpriteFrame,
+  UITransform,
+  Vec3,
+  view,
+  tween
+} from 'cc';
+import { moveWithinBounds } from '../core/MovementSystem.ts';
+import type { SkillConfig, Vec2Value } from '../core/types.ts';
+import { parseAppearanceLibraryConfig, parseFishConfig, parsePlayerAppearanceConfig, parseSkillConfig, parseSkillLibraryConfig, parseSkillLoadoutConfig } from '../data/ConfigValidator.ts';
+import { SkillCatalog } from '../data/SkillCatalog.ts';
+import { createPlatformService } from '../platform/PlatformAdapters.ts';
+import { RealtimeSession } from '../network/RealtimeSession.ts';
+import { RemotePlayerRegistry } from '../network/RemotePlayerRegistry.ts';
+import type { AppearanceChanged, AppearanceId, NetworkMessage, RemotePlayerState, SkillEffect, SkillResolved, PlayerDamaged, PlayerDied, PlayerRespawned, CombatSettlement, SkillId } from '../network/NetworkProtocol.ts';
+import { SkillActionPanel } from '../cocos/SkillActionPanel.ts';
+import { SkillEffectExecutor } from '../cocos/SkillEffectExecutor.ts';
+import { FishHealthBarOverlay } from '../cocos/FishHealthBarOverlay.ts';
+import { FishNameOverlay } from '../cocos/FishNameOverlay.ts';
+import { FishOverlayManager } from '../cocos/FishOverlayManager.ts';
+import { ConnectionDialog } from '../cocos/ConnectionDialog.ts';
+import { CombatEffectPresenter } from '../cocos/CombatEffectPresenter.ts';
+import { LoginFlowController } from '../cocos/LoginFlowController.ts';
+import { RoleManager } from '../cocos/RoleManager.ts';
+import { LocalPlayer } from '../cocos/LocalPlayer.ts';
+import { Player } from '../cocos/Player.ts';
+import { MainUIManager } from '../cocos/MainUIManager.ts';
+import { AnimationsResManager } from '../cocos/AnimationsResManager.ts';
+import { PlayerInputController } from '../input/PlayerInputController.ts';
+import { SceneManager } from './SceneManager.ts';
+import { GameResourceLoader } from './GameResourceLoader.ts';
+
+/**
+ * 游戏运行时门面：协调场景、输入、角色、网络和 UI 模块，
+ * 不作为 Cocos 场景脚本挂载，避免把运行时细节堆积在 GameBootstrap 中。
+ */
+export class GameRuntime {
+  private static readonly WORLD_WIDTH = 3840;
+  private static readonly WORLD_HEIGHT = 2160;
+  private static readonly PLAYER_SPEED = 260;
+  private static readonly PLAYER_MARGIN = 96;
+
+  private removePauseListener?: () => void;
+  private removeResumeListener?: () => void;
+  private localPlayer?: LocalPlayer;
+  private roleManager?: RoleManager;
+  private animationsResManager?: AnimationsResManager;
+  private readonly sceneManager: SceneManager;
+  private cameraNode?: Node;
+  private hudRoot?: Node;
+  private actionHint?: Label;
+  private healthLabel?: Label;
+  private fishHealthOverlay?: Node;
+  private mainUi?: MainUIManager;
+  private fishOverlayManager?: FishOverlayManager;
+  private skillPanel?: SkillActionPanel;
+  private skillCatalog?: SkillCatalog;
+  private skillExecutor?: SkillEffectExecutor;
+  private combatEffects?: CombatEffectPresenter;
+  private healthBarFrame?: SpriteFrame;
+  private healthBarFill?: SpriteFrame;
+  private readonly remoteAnimationTokens = new WeakMap<Sprite, number>();
+  private readonly remoteSwimStates = new Map<Sprite, { frameIndex: number; elapsed: number; active: boolean; frames: SpriteFrame[]; frameDuration: number }>();
+  private readonly whaleOpacityTokens = new WeakMap<Player, number>();
+  private readonly whaleScaleTokens = new WeakMap<Player, number>();
+  private readonly localWhaleTargetSequences = new Map<string, number>();
+  private localActionSequence = 0;
+  private swimFrameIndex = 0;
+  private animationElapsed = 0;
+  private fishActionState: 'swim' | 'bite' | 'dashBite' | 'whaleSwallow' | 'deathRoll' | 'inkSplash' | 'orcaCharge' | 'hurt' = 'swim';
+  private fishActionElapsed = 0;
+  private fishActionDuration = 0;
+  private readonly playerInput = new PlayerInputController();
+  private readonly resourceLoader = new GameResourceLoader();
+  private readonly realtime = new RealtimeSession();
+  private remotePlayers?: RemotePlayerRegistry;
+  private networkPlayerId?: string;
+  private networkClientTick = 0;
+  private networkInputElapsed = 0;
+  private connectionDialog?: ConnectionDialog;
+  private connectionDetail = '';
+  private offlineModeSelected = false;
+  private isDestroying = false;
+  private loginFlow?: LoginFlowController;
+
+  public constructor(private readonly rootNode: Node) {
+    this.sceneManager = new SceneManager(rootNode);
+  }
+
+  public async start(): Promise<void> {
+    view.setDesignResolutionSize(1280, 720, ResolutionPolicy.SHOW_ALL);
+    const platform = createPlatformService('web');
+    await platform.init();
+    this.removePauseListener = platform.onPause(() => this.rootNode.pauseSystemEvents(true));
+    this.removeResumeListener = platform.onResume(() => this.rootNode.resumeSystemEvents(true));
+    await this.createOceanWorld();
+    this.playerInput.bind();
+    this.loginFlow = new LoginFlowController({
+      getInputLayer: () => this.mainUi?.inputLayer,
+      realtime: this.realtime,
+      onValidationError: () => { if (this.actionHint) this.actionHint.string = '请输入用户名'; },
+      onUsernameAccepted: (username) => {
+        this.setFishName('local-player', username);
+      },
+      onMessage: (message) => this.handleNetworkMessage(message),
+      onDiagnostic: (detail) => this.setConnectionDiagnostic(detail),
+      onConnected: () => { this.hideConnectionDialog(); if (this.actionHint) this.actionHint.string = '已连接默认海域'; },
+      onConnectionLost: (reason) => this.showConnectionDialog(reason)
+    });
+    this.loginFlow.openTestEnvironment();
+  }
+
+  public destroy(): void {
+    this.isDestroying = true;
+    this.playerInput.unbind();
+    this.removePauseListener?.();
+    this.removeResumeListener?.();
+    this.remotePlayers?.clear();
+    this.roleManager?.clear();
+    this.roleManager = undefined;
+    this.animationsResManager?.clear();
+    this.animationsResManager = undefined;
+    this.remoteSwimStates.clear();
+    this.localWhaleTargetSequences.clear();
+    this.fishOverlayManager?.clear();
+    this.fishOverlayManager = undefined;
+    this.connectionDialog?.destroy();
+    this.connectionDialog = undefined;
+    this.loginFlow?.close();
+    this.loginFlow = undefined;
+  }
+
+  public update(deltaTime: number): void {
+    const localPlayer = this.localPlayer;
+    if (!localPlayer || !this.cameraNode) return;
+    this.skillPanel?.update(deltaTime);
+    this.updateFishAction(deltaTime);
+    this.advanceRemoteSwimAnimations(deltaTime);
+    if (this.loginFlow?.isDialogOpen) { this.updateFishHealthDisplays(); return; }
+    if (localPlayer.dead) { this.updateFishHealthDisplays(); return; }
+
+    const direction = this.playerInput.readDirection();
+    const moving = Math.hypot(direction.x, direction.y) > 0.01;
+    const next = localPlayer.move(
+      direction,
+      GameRuntime.PLAYER_SPEED,
+      deltaTime,
+      {
+        minX: -GameRuntime.WORLD_WIDTH / 2 + GameRuntime.PLAYER_MARGIN,
+        maxX: GameRuntime.WORLD_WIDTH / 2 - GameRuntime.PLAYER_MARGIN,
+        minY: -GameRuntime.WORLD_HEIGHT / 2 + GameRuntime.PLAYER_MARGIN,
+        maxY: GameRuntime.WORLD_HEIGHT / 2 - GameRuntime.PLAYER_MARGIN
+      }
+    );
+    this.advanceSwimAnimation(deltaTime, moving);
+    this.followPlayer(next.x, next.y);
+    this.updateFishHealthDisplays();
+    this.networkInputElapsed += deltaTime;
+    if (this.networkInputElapsed >= 0.05) {
+      this.networkInputElapsed = 0;
+      this.realtime.sendInput({ clientTick: ++this.networkClientTick, moveX: direction.x, moveY: direction.y, rotation: localPlayer.facingAngle });
+    }
+  }
+
+  private async createOceanWorld(): Promise<void> {
+    const { worldRoot, playerLayer, cameraNode, hudRoot } = this.sceneManager.resolveNodes();
+    this.combatEffects = new CombatEffectPresenter(worldRoot);
+    this.cameraNode = cameraNode;
+    this.hudRoot = hudRoot;
+    const [playerFishConfigRaw, skillLoadoutRaw, skillLibraryRaw, appearanceLibraryRaw] = await Promise.all([
+      this.loadJson('configs/fish-player'),
+      this.loadJson('configs/skill-loadout-player'),
+      this.loadJson('configs/skill-library-player'),
+      this.loadJson('configs/appearance-library-player')
+    ]);
+    const playerFishConfig = parseFishConfig(playerFishConfigRaw);
+    const skillLoadout = parseSkillLoadoutConfig(skillLoadoutRaw);
+    const skillLibrary = parseSkillLibraryConfig(skillLibraryRaw);
+    const appearanceLibrary = parseAppearanceLibraryConfig(appearanceLibraryRaw);
+    const loadedSkillEntries = await Promise.all(skillLibrary.skillConfigPaths.map(async (path) => ({ path, skill: parseSkillConfig(await this.loadJson(path)) })));
+    const skillByPath = new Map(loadedSkillEntries.map((entry) => [entry.path, entry.skill]));
+    const allSkills = loadedSkillEntries.map((entry) => entry.skill);
+    const skills = skillLoadout.skillConfigPaths.map((path) => {
+      const skill = skillByPath.get(path);
+      if (!skill) throw new Error(`默认技能不在技能库中：${path}`);
+      return skill;
+    });
+    this.skillCatalog = new SkillCatalog(allSkills);
+    const appearances = await Promise.all(appearanceLibrary.appearanceConfigPaths.map(async (path) => parsePlayerAppearanceConfig(await this.loadJson(path))));
+    // WorldRoot、HudRoot 和 MainCamera 共用 Canvas 中心作为局部原点。
+    // Canvas 的锚点换算由引擎负责，子根节点不得再次减去半屏尺寸。
+    const skillImages = new Map<string, ImageAsset>();
+    const images = await Promise.all([
+      this.loadImage('art/map/sea-background'),
+      this.loadImage('art/ui/joystick-base'),
+      this.loadImage('art/ui/joystick-knob'),
+      this.loadImage('art/ui/health-bar-frame'),
+      this.loadImage('art/ui/health-bar-fill'),
+      this.loadImage('art/ui/skill-loadout-entry'),
+      this.loadImage('art/ui/transform-entry'),
+      ...allSkills.map((skill) => this.loadImage(skill.ui.iconPath))
+    ]);
+    const [backgroundImage, joystickBase, joystickKnob, healthBarFrame, healthBarFill, skillEntryImage, transformEntryImage, ...skillImageAssets] = images;
+    allSkills.forEach((skill, index) => skillImages.set(skill.id, skillImageAssets[index] as ImageAsset));
+    this.animationsResManager = new AnimationsResManager(appearanceLibrary.defaultAppearanceId);
+    await this.animationsResManager.load(appearances);
+    const defaultAppearance = this.animationsResManager.defaultResources;
+    const appearancePortraits = this.animationsResManager.getPortraits();
+    if (playerFishConfig.artFacingDirection !== defaultAppearance.config.artFacingDirection) throw new Error('玩家鱼与默认形象美术方向不一致');
+
+    this.sceneManager.createOceanBackground(worldRoot, backgroundImage, GameRuntime.WORLD_WIDTH, GameRuntime.WORLD_HEIGHT);
+    this.healthBarFrame = SceneManager.createSpriteFrame(healthBarFrame);
+    this.healthBarFill = SceneManager.createSpriteFrame(healthBarFill);
+    this.mainUi = new MainUIManager({
+      hudRoot: this.hudRoot,
+      joystickBase,
+      joystickKnob,
+      skillLoadout,
+      allSkills,
+      skills,
+      skillImages,
+      skillEntryImage: skillEntryImage as ImageAsset,
+      transformEntryImage: transformEntryImage as ImageAsset,
+      appearances,
+      appearancePortraits,
+      defaultAppearanceId: appearanceLibrary.defaultAppearanceId,
+      onAppearanceChange: (appearanceId) => this.applyLocalAppearance(appearanceId, true),
+      onSkillActivate: (skill) => this.skillExecutor?.activate(skill) ?? false,
+      onJoystickStart: this.playerInput.onJoystickStart,
+      onJoystickMove: this.playerInput.onJoystickMove,
+      onJoystickEnd: this.playerInput.onJoystickEnd
+    });
+    this.fishHealthOverlay = this.mainUi.fishHealthOverlay;
+    this.fishOverlayManager = new FishOverlayManager(this.fishHealthOverlay, this.healthBarFrame, this.healthBarFill);
+    this.actionHint = this.mainUi.actionHint;
+    this.healthLabel = this.mainUi.healthLabel;
+    this.playerInput.setJoystickKnob(this.mainUi.joystickKnob);
+    this.skillPanel = this.mainUi.skillPanel;
+    const selectedAppearance = this.animationsResManager.select(this.mainUi.selectedAppearanceId).resources;
+    this.swimFrameIndex = 0;
+    this.animationElapsed = 0;
+    this.roleManager = new RoleManager(playerLayer, selectedAppearance.swimFrames[0], selectedAppearance.config.artFacingDirection);
+    const localRole = this.roleManager.createLocalPlayer();
+    this.localPlayer = localRole;
+    localRole.setAppearance(selectedAppearance.config.id, selectedAppearance.swimFrames[0] ?? null, selectedAppearance.config.artFacingDirection);
+    localRole.setFacing(180);
+    this.createFishHealthDisplay('local-player', localRole.node, localRole.health, localRole.maxHealth);
+    this.createFishNameDisplay('local-player', localRole.node, '');
+    this.remotePlayers = new RemotePlayerRegistry((state) => this.createRemotePlayerView(state));
+    this.skillExecutor = this.createSkillEffectExecutor();
+
+    this.updateHealthHud();
+  }
+
+  private applyLocalAppearance(appearanceId: string, syncToServer: boolean): void {
+    const manager = this.requireAnimationsResManager();
+    const selection = manager.select(appearanceId);
+    const assets = selection.resources;
+    const nextId = assets.config.id as AppearanceId;
+    const changed = selection.changed || this.localPlayer?.appearanceId !== nextId;
+    if (changed) {
+      this.swimFrameIndex = 0;
+      this.animationElapsed = 0;
+      if (this.localPlayer) {
+        this.fishActionState = 'swim';
+        this.fishActionElapsed = 0;
+        this.fishActionDuration = 0;
+        this.localPlayer.setAppearance(nextId, assets.swimFrames[0] ?? null, assets.config.artFacingDirection);
+        if (this.actionHint) this.actionHint.string = `已变身为${assets.config.displayName}`;
+      }
+    }
+    if (syncToServer && !this.offlineModeSelected) this.realtime.sendAppearance(nextId);
+  }
+
+  private requireAnimationsResManager(): AnimationsResManager {
+    if (!this.animationsResManager) throw new Error('玩家动作资源管理器尚未初始化');
+    return this.animationsResManager;
+  }
+
+  private createRemotePlayerView(state: RemotePlayerState) {
+    const roleManager = this.roleManager;
+    if (!roleManager) throw new Error('RoleManager 尚未初始化。');
+    const role = roleManager.createRemotePlayer(state.playerId);
+    const node = role.node;
+    const sprite = role.sprite;
+    const animations = this.requireAnimationsResManager();
+    let appearance = animations.get(state.appearanceId);
+    role.setAppearance(appearance.config.id, appearance.swimFrames[0] ?? null, appearance.config.artFacingDirection);
+    this.remoteSwimStates.set(sprite, { frameIndex: 0, elapsed: 0, active: true, frames: appearance.swimFrames, frameDuration: appearance.config.swimFrameDurationSeconds });
+    role.setFacing(state.rotation);
+    role.setHealth(state.health, state.maxHealth);
+    role.setDead(state.dead);
+    this.createFishHealthDisplay(state.playerId, node, state.health, state.maxHealth);
+    this.createFishNameDisplay(state.playerId, node, state.displayName);
+    return {
+      setPosition: (x: number, y: number) => role.setPosition(x, y),
+      setRotation: (angle: number) => role.setFacing(angle),
+      setAppearance: (appearanceId: AppearanceId) => {
+        if (role.appearanceId === appearanceId) return;
+        appearance = animations.get(appearanceId);
+        this.remoteAnimationTokens.set(sprite, (this.remoteAnimationTokens.get(sprite) ?? 0) + 1);
+        const swimState = this.remoteSwimStates.get(sprite);
+        if (swimState) {
+          swimState.frames = appearance.swimFrames;
+          swimState.frameDuration = appearance.config.swimFrameDurationSeconds;
+          swimState.frameIndex = 0;
+          swimState.elapsed = 0;
+          swimState.active = !role.dead;
+        }
+        role.setAppearance(appearanceId, appearance.swimFrames[0] ?? null, appearance.config.artFacingDirection);
+      },
+      setHealth: (health: number, maxHealth: number) => { role.setHealth(health, maxHealth); this.setFishHealth(state.playerId, health, maxHealth); },
+      playSkill: (skillId: SkillId, effectDurationMs?: number) => {
+        const skill = this.getConfiguredNetworkSkill(skillId);
+        if (!skill) return;
+        const actionDuration = skill.clientEffect.animationDurationSeconds;
+        const radians = role.facingAngle * Math.PI / 180;
+        if (skill.clientEffect.kind === 'inkSplash') {
+          this.combatEffects?.playInkSplash(
+            node.position.x,
+            node.position.y,
+            skill.clientEffect.visualRadius,
+            skill.clientEffect.rayCount ?? 16,
+            skill.clientEffect.rayLength ?? skill.clientEffect.visualRadius,
+            new Color(skill.clientEffect.visualColor.r, skill.clientEffect.visualColor.g, skill.clientEffect.visualColor.b, skill.clientEffect.visualColor.a),
+            skill.clientEffect.sprayDurationSeconds ?? 0.5,
+            skill.clientEffect.expansionDelaySeconds ?? 0.5,
+            skill.clientEffect.expansionDurationSeconds ?? 0.5
+          );
+        }
+        if (skill.clientEffect.kind === 'dashBite' || skill.clientEffect.kind === 'orcaCharge') this.createDashEffect(node.position.x, node.position.y, role.facingAngle);
+        if (skill.clientEffect.kind !== 'inkSplash') this.createBiteEffect(
+          node.position.x + Math.cos(radians) * skill.clientEffect.visualOffset,
+          node.position.y,
+          role.facingAngle,
+          skill.clientEffect.visualRadius,
+          new Color(skill.clientEffect.visualColor.r, skill.clientEffect.visualColor.g, skill.clientEffect.visualColor.b, skill.clientEffect.visualColor.a),
+          skill.clientEffect.visualDurationSeconds
+        );
+        this.playRemoteFishAnimation(sprite, appearance.attackFrames, actionDuration);
+        if (skill.clientEffect.kind === 'deathRoll') role.startVisualRoll(actionDuration);
+        if (skill.clientEffect.kind === 'whaleSwallow') {
+          this.applyWhaleSourceVisual(
+            role,
+            effectDurationMs ?? this.getWhaleEffectDurationMs(),
+            () => role.dead ? 0.6 : 1
+          );
+        }
+      },
+      playWhaleTarget: (effectDurationMs?: number) => {
+        this.applyWhaleOpacity(role, effectDurationMs ?? this.getWhaleEffectDurationMs());
+      },
+      playDeathRollTarget: (effectDurationMs?: number) => role.startVisualRoll((effectDurationMs ?? 1150) / 1000),
+      playKnockback: (targetX: number, targetY: number, effectDurationMs?: number) => role.playKnockback(targetX, targetY, (effectDurationMs ?? 650) / 1000),
+      playHurt: (skillId: string) => {
+        const duration = this.getConfiguredNetworkSkill(skillId)?.clientEffect.animationDurationSeconds ?? 0.34;
+        this.playRemoteFishAnimation(sprite, appearance.hurtFrames, duration);
+      },
+      playDeath: () => {
+        role.setDead(true);
+        this.remoteAnimationTokens.set(sprite, (this.remoteAnimationTokens.get(sprite) ?? 0) + 1);
+        const swimState = this.remoteSwimStates.get(sprite);
+        if (swimState) { swimState.active = false; swimState.elapsed = 0; }
+      },
+      playRespawn: () => {
+        role.setDead(false);
+        this.stopRemoteFishAnimation(sprite);
+        role.setFrame(appearance.swimFrames[0] ?? null);
+      },
+      destroy: () => {
+        this.remoteSwimStates.delete(sprite);
+        this.removeFishHealthDisplay(state.playerId);
+        this.removeFishNameDisplay(state.playerId);
+        roleManager.remove(state.playerId);
+      }
+    };
+  }
+
+  private getConfiguredNetworkSkill(networkSkillId: string): SkillConfig | undefined {
+    try { return this.skillCatalog?.getByNetworkSkillId(networkSkillId); }
+    catch { return undefined; }
+  }
+
+  private isWhaleSwallowNetworkSkill(networkSkillId: string): boolean {
+    return this.getConfiguredNetworkSkill(networkSkillId)?.clientEffect.kind === 'whaleSwallow';
+  }
+
+  private isOrcaChargeNetworkSkill(networkSkillId: string): boolean {
+    return this.getConfiguredNetworkSkill(networkSkillId)?.clientEffect.kind === 'orcaCharge';
+  }
+
+  private getWhaleSkill(): SkillConfig | undefined {
+    return this.skillCatalog?.findByClientEffect('whaleSwallow');
+  }
+
+  private getWhaleEffectDurationMs(): number {
+    return (this.getWhaleSkill()?.effectDurationSeconds ?? 3) * 1000;
+  }
+
+  private getWhaleScaleMultiplier(): number {
+    return this.getWhaleSkill()?.scaleMultiplier ?? 3;
+  }
+
+  private getWhaleOpacityAlpha(): number {
+    return Math.round((this.getWhaleSkill()?.opacity ?? 0.5) * 255);
+  }
+
+  private applyWhaleSourceVisual(
+    player: Player,
+    durationMs: number,
+    getRestoreScale: () => number
+  ): void {
+    const durationSeconds = Math.max(0.05, durationMs / 1000);
+    const scaleToken = (this.whaleScaleTokens.get(player) ?? 0) + 1;
+    this.whaleScaleTokens.set(player, scaleToken);
+    player.setVisualScale(this.getWhaleScaleMultiplier());
+    this.applyWhaleOpacity(player, durationMs);
+    this.scheduleOnce(() => {
+      if (!player.node.isValid || this.whaleScaleTokens.get(player) !== scaleToken) return;
+      player.restoreVisualScale(getRestoreScale());
+    }, durationSeconds);
+  }
+
+  private applyWhaleOpacity(player: Player, durationMs: number): void {
+    const durationSeconds = Math.max(0.05, durationMs / 1000);
+    const opacityToken = (this.whaleOpacityTokens.get(player) ?? 0) + 1;
+    this.whaleOpacityTokens.set(player, opacityToken);
+    player.setOpacity(this.getWhaleOpacityAlpha());
+    this.scheduleOnce(() => {
+      if (!player.node.isValid || this.whaleOpacityTokens.get(player) !== opacityToken) return;
+      player.setOpacity(255);
+    }, durationSeconds);
+  }
+
+  private playRemoteFishAnimation(sprite: Sprite, frames: SpriteFrame[], duration: number): void {
+    if (frames.length === 0) return;
+    const swimState = this.remoteSwimStates.get(sprite);
+    if (swimState) { swimState.active = false; swimState.elapsed = 0; }
+    const token = (this.remoteAnimationTokens.get(sprite) ?? 0) + 1;
+    this.remoteAnimationTokens.set(sprite, token);
+    const frameDuration = duration / frames.length;
+    frames.forEach((frame, index) => this.scheduleOnce(() => {
+      if (sprite.isValid && this.remoteAnimationTokens.get(sprite) === token) sprite.spriteFrame = frame;
+    }, index * frameDuration));
+    this.scheduleOnce(() => {
+      if (sprite.isValid && this.remoteAnimationTokens.get(sprite) === token) {
+        sprite.spriteFrame = swimState?.frames[0] ?? null;
+        if (swimState) { swimState.frameIndex = 0; swimState.elapsed = 0; swimState.active = true; }
+      }
+    }, duration);
+  }
+
+  private stopRemoteFishAnimation(sprite: Sprite): void {
+    this.remoteAnimationTokens.set(sprite, (this.remoteAnimationTokens.get(sprite) ?? 0) + 1);
+    const swimState = this.remoteSwimStates.get(sprite);
+    if (swimState) { swimState.frameIndex = 0; swimState.elapsed = 0; swimState.active = true; }
+  }
+
+  private advanceRemoteSwimAnimations(deltaTime: number): void {
+    for (const [sprite, state] of this.remoteSwimStates) {
+      if (!sprite.isValid || !state.active || state.frames.length === 0) continue;
+      state.elapsed += deltaTime;
+      while (state.elapsed >= state.frameDuration) {
+        state.elapsed -= state.frameDuration;
+        state.frameIndex = (state.frameIndex + 1) % state.frames.length;
+        sprite.spriteFrame = state.frames[state.frameIndex] ?? state.frames[0];
+      }
+    }
+  }
+
+  private createFishHealthDisplay(id: string, fish: Node, health: number, maxHealth: number): void {
+    this.fishOverlayManager?.add(id, fish, health, maxHealth, '');
+  }
+
+  private setFishHealth(id: string, health: number, maxHealth: number): void {
+    this.fishOverlayManager?.setHealth(id, health, maxHealth);
+  }
+
+  private removeFishHealthDisplay(id: string): void { this.fishOverlayManager?.remove(id); }
+
+  private createFishNameDisplay(id: string, fish: Node, name: string): void {
+    this.fishOverlayManager?.add(id, fish, 0, 1, name);
+  }
+
+  private setFishName(id: string, name: string): void { this.fishOverlayManager?.setName(id, name); }
+  private removeFishNameDisplay(id: string): void { this.fishOverlayManager?.remove(id); }
+
+  private updateFishHealthDisplays(): void {
+    this.fishOverlayManager?.update();
+  }
+
+  private setConnectionDiagnostic(detail: string): void { this.connectionDetail = detail; console.warn(`[FishEatFish] ${detail}`); }
+
+  private showConnectionDialog(reason: string): void {
+    if (this.offlineModeSelected || this.isDestroying) return;
+    this.actionHint && (this.actionHint.string = reason);
+    if (this.connectionDialog) { this.connectionDialog.show(this.connectionDetail || reason); return; }
+    const inputLayer = this.mainUi?.inputLayer;
+    if (!inputLayer) return;
+    this.connectionDialog = new ConnectionDialog({ parent: inputLayer, onRetry: () => { this.hideConnectionDialog(); this.loginFlow?.retry(); }, onOffline: () => { this.offlineModeSelected = true; this.loginFlow?.selectOffline(); this.hideConnectionDialog(); if (this.actionHint) this.actionHint.string = '当前为本地单机模式'; } });
+    this.connectionDialog.show(this.connectionDetail || reason);
+  }
+
+  private hideConnectionDialog(): void { this.connectionDialog?.hide(); }
+
+  private handleNetworkMessage(message: NetworkMessage): void {
+    if (message.type === 'roomSnapshot') {
+      const snapshot = message.payload as { selfPlayerId?: string; players: RemotePlayerState[] };
+      this.networkPlayerId = snapshot.selfPlayerId;
+      const self = snapshot.players.find((player) => player.playerId === this.networkPlayerId);
+      if (self) this.setFishName('local-player', self.displayName);
+      this.applyRemotePlayers(snapshot.players);
+      if (self) {
+        this.applyLocalSnapshotAction(self);
+        this.realtime.sendAppearance(this.requireAnimationsResManager().currentResources.config.id as AppearanceId);
+      }
+    } else if (message.type === 'stateSnapshot') {
+      const snapshot = message.payload as { players: RemotePlayerState[] };
+      this.applyRemotePlayers(snapshot.players);
+      const self = snapshot.players.find((player) => player.playerId === this.networkPlayerId);
+      if (self) { this.applyLocalAppearance(self.appearanceId, false); this.applyLocalSnapshotAction(self); }
+    } else if (message.type === 'playerJoined') {
+      const player = message.payload as RemotePlayerState;
+      if (player.playerId !== this.networkPlayerId) this.remotePlayers?.upsert(player);
+    } else if (message.type === 'playerRemoved') {
+      this.remotePlayers?.remove((message.payload as { playerId: string }).playerId);
+    } else if (message.type === 'appearanceChanged') {
+      const event = message.payload as AppearanceChanged;
+      if (event.playerId === this.networkPlayerId) this.applyLocalAppearance(event.appearanceId, false);
+      else this.remotePlayers?.setAppearance(event.playerId, event.appearanceId);
+    } else if (message.type === 'skillEffect') {
+      const effect = message.payload as SkillEffect;
+      if (this.isWhaleSwallowNetworkSkill(effect.skillId)) this.handleWhaleSwallowEffect(effect);
+      else if (this.isOrcaChargeNetworkSkill(effect.skillId)) this.handleOrcaChargeEffect(effect);
+      else if (effect.playerId === this.networkPlayerId) {
+        if (this.getConfiguredNetworkSkill(effect.skillId)?.clientEffect.kind === 'deathRoll' && effect.targetId) {
+          this.remotePlayers?.playDeathRollTarget(effect.targetId, effect.effectDurationMs ?? 1150);
+        }
+      } else {
+        this.remotePlayers?.setTransform(effect.playerId, effect.x, effect.y, effect.rotation);
+        this.remotePlayers?.playSkill(effect.playerId, effect.skillId, effect.actionSequence, effect.targetId, effect.effectDurationMs ?? 1150);
+        if (this.getConfiguredNetworkSkill(effect.skillId)?.clientEffect.kind === 'deathRoll' && effect.targetId === this.networkPlayerId) {
+          this.localPlayer?.startVisualRoll((effect.effectDurationMs ?? 1150) / 1000);
+        }
+      }
+    } else if (message.type === 'skillResolved') {
+      const result = message.payload as SkillResolved;
+      if (result.playerId === this.networkPlayerId && this.actionHint) {
+        if ((this.isWhaleSwallowNetworkSkill(result.skillId) || this.isOrcaChargeNetworkSkill(result.skillId)) && result.reason === 'noTarget') {
+          this.skillPanel?.cancelCooldownForNetworkSkill(result.skillId);
+          this.actionHint.string = this.isOrcaChargeNetworkSkill(result.skillId) ? '虎鲸冲刺前方没有可锁定目标' : '鲸吞范围内没有可用目标';
+        } else if (!result.reason && this.isWhaleSwallowNetworkSkill(result.skillId)) this.actionHint.string = `鲸吞已锁定目标，效果持续 ${this.getWhaleEffectDurationMs() / 1000} 秒`;
+        else if (!result.reason && this.isOrcaChargeNetworkSkill(result.skillId)) this.actionHint.string = '虎鲸冲刺命中：造成 60 点伤害并顶飞目标';
+        else if (!result.reason) this.actionHint.string = result.hitCount > 0 ? `命中 ${result.hitCount} 名玩家` : '未命中：靠近并面向对方后再撕咬';
+        else if (result.reason === 'cooldown') this.actionHint.string = '技能冷却中';
+        else if (result.reason === 'dead') this.actionHint.string = '死亡期间不能攻击';
+        else this.actionHint.string = '攻击输入已过期，请重新释放';
+      }
+    } else if (message.type === 'playerDamaged') {
+      const event = message.payload as PlayerDamaged;
+      if (event.targetId === this.networkPlayerId) { this.localPlayer?.setHealth(event.health, event.maxHealth); this.updateHealthHud(); this.actionHint && (this.actionHint.string = `受到撕咬伤害：${event.damage}，生命 ${event.health}/${event.maxHealth}`); this.startFishAction('hurt', this.getConfiguredNetworkSkill(event.skillId)?.clientEffect.animationDurationSeconds ?? 0.34); }
+      else { this.remotePlayers?.setHealth(event.targetId, event.health, event.maxHealth); this.remotePlayers?.playHurt(event.targetId, event.skillId); }
+    } else if (message.type === 'playerDied') {
+      const event = message.payload as PlayerDied;
+      if (event.targetId === this.networkPlayerId) { this.localPlayer?.setDead(true); this.actionHint && (this.actionHint.string = '你已被击败，3 秒后复活'); }
+      else this.remotePlayers?.playDeath(event.targetId);
+    } else if (message.type === 'playerRespawned') {
+      const event = message.payload as PlayerRespawned;
+      if (event.playerId === this.networkPlayerId) { this.localPlayer?.setDead(false); this.localPlayer?.setHealth(event.health, event.maxHealth); this.updateHealthHud(); this.localPlayer?.setPosition(event.x, event.y); this.actionHint && (this.actionHint.string = '已复活，3 秒无敌'); }
+      else { this.remotePlayers?.setTransform(event.playerId, event.x, event.y, 0); this.remotePlayers?.setHealth(event.playerId, event.health, event.maxHealth); this.remotePlayers?.playRespawn(event.playerId); }
+    } else if (message.type === 'combatSettlement') {
+      const event = message.payload as CombatSettlement;
+      if (event.playerId === this.networkPlayerId) { this.localPlayer?.setHealth(event.health, event.maxHealth); this.updateHealthHud(); this.actionHint && (this.actionHint.string = event.leveled ? `击败玩家，升级至 ${event.level} 级，生命上限 ${event.maxHealth}` : `击败玩家，获得经验，击杀 ${event.kills}`); }
+    } else if (message.type === 'stateCorrection') {
+      const state = message.payload as RemotePlayerState;
+      if (state.playerId === this.networkPlayerId) {
+        this.localPlayer?.setHealth(state.health, state.maxHealth);
+        this.localPlayer?.setDead(state.dead);
+        this.updateHealthHud();
+        this.localPlayer?.setPosition(state.x, state.y);
+        this.localPlayer?.setFacing(state.rotation, state.dead ? 0.6 : undefined);
+        this.applyLocalAppearance(state.appearanceId, false);
+        this.applyLocalSnapshotAction(state);
+      }
+    }
+  }
+
+  private applyRemotePlayers(players: RemotePlayerState[]): void {
+    const seen = new Set<string>();
+    for (const player of players) {
+      if (player.playerId === this.networkPlayerId) continue;
+      seen.add(player.playerId);
+      const targetsLocalPlayer = player.action !== undefined && this.isWhaleSwallowNetworkSkill(player.action) && player.actionTargetId === this.networkPlayerId;
+      this.remotePlayers?.upsert(targetsLocalPlayer ? { ...player, actionTargetId: undefined } : player);
+      if (
+        targetsLocalPlayer
+        && player.actionSequence !== undefined
+        && player.actionSequence > (this.localWhaleTargetSequences.get(player.playerId) ?? 0)
+      ) {
+        this.localWhaleTargetSequences.set(player.playerId, player.actionSequence);
+        if (this.localPlayer) this.applyWhaleOpacity(this.localPlayer, player.actionRemainingMs ?? this.getWhaleEffectDurationMs());
+      }
+    }
+    for (const id of this.remotePlayers?.ids() ?? []) if (!seen.has(id)) this.remotePlayers?.remove(id);
+  }
+
+  private handleWhaleSwallowEffect(effect: SkillEffect): void {
+    const durationMs = effect.effectDurationMs ?? this.getWhaleEffectDurationMs();
+    if (effect.playerId === this.networkPlayerId) {
+      if (effect.actionSequence <= this.localActionSequence) return;
+      this.localActionSequence = effect.actionSequence;
+      this.localPlayer?.setPosition(effect.x, effect.y);
+      this.startFishAction('whaleSwallow', this.getConfiguredNetworkSkill(effect.skillId)?.clientEffect.animationDurationSeconds ?? 0.42);
+      if (this.localPlayer) {
+        this.applyWhaleSourceVisual(
+          this.localPlayer,
+          durationMs,
+          () => this.localPlayer?.dead ? 0.6 : 1
+        );
+      }
+      if (effect.targetId && effect.targetId !== this.networkPlayerId) this.remotePlayers?.playWhaleTarget(effect.targetId, durationMs);
+      return;
+    }
+
+    this.remotePlayers?.setTransform(effect.playerId, effect.x, effect.y, effect.rotation);
+    this.remotePlayers?.playSkill(
+      effect.playerId,
+      effect.skillId,
+      effect.actionSequence,
+      effect.targetId === this.networkPlayerId ? undefined : effect.targetId,
+      durationMs
+    );
+    if (
+      effect.targetId === this.networkPlayerId
+      && effect.actionSequence > (this.localWhaleTargetSequences.get(effect.playerId) ?? 0)
+    ) {
+      this.localWhaleTargetSequences.set(effect.playerId, effect.actionSequence);
+      if (this.localPlayer) this.applyWhaleOpacity(this.localPlayer, durationMs);
+    }
+  }
+
+  private handleOrcaChargeEffect(effect: SkillEffect): void {
+    const durationMs = effect.effectDurationMs ?? 650;
+    if (effect.playerId === this.networkPlayerId) {
+      this.localPlayer?.setPosition(effect.x, effect.y);
+      this.followPlayer(effect.x, effect.y);
+    } else {
+      this.remotePlayers?.setTransform(effect.playerId, effect.x, effect.y, effect.rotation);
+      this.remotePlayers?.playSkill(effect.playerId, effect.skillId, effect.actionSequence, effect.targetId, durationMs);
+    }
+    if (!effect.targetId || effect.targetX === undefined || effect.targetY === undefined) return;
+    if (effect.targetId === this.networkPlayerId) {
+      this.localPlayer?.playKnockback(effect.targetX, effect.targetY, durationMs / 1000);
+      this.followPlayer(effect.targetX, effect.targetY);
+    } else {
+      this.remotePlayers?.playKnockback(effect.targetId, effect.targetX, effect.targetY, durationMs);
+    }
+  }
+
+  private applyLocalSnapshotAction(state: RemotePlayerState): void {
+    if (
+      state.action === undefined
+      || !this.isWhaleSwallowNetworkSkill(state.action)
+      || state.actionSequence === undefined
+      || state.actionSequence <= this.localActionSequence
+    ) return;
+    this.localActionSequence = state.actionSequence;
+    const durationMs = state.actionRemainingMs ?? this.getWhaleEffectDurationMs();
+    this.startFishAction('whaleSwallow', this.getWhaleSkill()?.clientEffect.animationDurationSeconds ?? 0.42);
+    if (this.localPlayer) {
+      this.applyWhaleSourceVisual(
+        this.localPlayer,
+        durationMs,
+        () => this.localPlayer?.dead ? 0.6 : 1
+      );
+    }
+    if (state.actionTargetId && state.actionTargetId !== this.networkPlayerId) {
+      this.remotePlayers?.playWhaleTarget(state.actionTargetId, durationMs);
+    }
+  }
+
+  private updateHealthHud(): void {
+    const player = this.localPlayer;
+    if (!player) return;
+    if (this.healthLabel) this.healthLabel.string = `生命 ${Math.max(0, Math.ceil(player.health))}/${player.maxHealth}`;
+    this.setFishHealth('local-player', player.health, player.maxHealth);
+  }
+
+  private createSkillEffectExecutor(): SkillEffectExecutor {
+    return new SkillEffectExecutor({
+      canActivate: () => Boolean(this.localPlayer) && !this.localPlayer?.dead,
+      isOfflineMode: () => this.offlineModeSelected,
+      getPlayerPosition: () => this.localPlayer ? { x: this.localPlayer.node.position.x, y: this.localPlayer.node.position.y } : undefined,
+      getFacingAngle: () => this.localPlayer?.facingAngle ?? 180,
+      startAction: (state, duration) => this.startFishAction(state, duration),
+      createBiteEffect: (x, y, angle, radius, color, duration) => this.createBiteEffect(x, y, angle, radius, new Color(color.r, color.g, color.b, color.a), duration),
+      createDashEffect: (x, y, angle) => this.createDashEffect(x, y, angle),
+      startVisualRoll: (duration) => this.localPlayer?.startVisualRoll(duration),
+      createInkSplashEffect: (x, y, radius, rayCount, rayLength, color, sprayDuration, expansionDelay, expansionDuration) => this.combatEffects?.playInkSplash(x, y, radius, rayCount, rayLength, new Color(color.r, color.g, color.b, color.a), sprayDuration, expansionDelay, expansionDuration),
+      moveDash: (distance, angle) => this.moveDash(distance, angle),
+      sendSkill: (networkSkillId) => this.sendSkillEvent(networkSkillId),
+      showHint: (text) => { if (this.actionHint) this.actionHint.string = text; }
+    });
+  }
+
+  private moveDash(distance: number, angle: number): Vec2Value {
+    const player = this.localPlayer;
+    if (!player) return { x: 0, y: 0 };
+    const start = player.node.position;
+    const next = moveWithinBounds(
+      { x: start.x, y: start.y },
+      { x: Math.cos(angle * Math.PI / 180), y: Math.sin(angle * Math.PI / 180) },
+      distance,
+      1,
+      {
+        minX: -GameRuntime.WORLD_WIDTH / 2 + GameRuntime.PLAYER_MARGIN,
+        maxX: GameRuntime.WORLD_WIDTH / 2 - GameRuntime.PLAYER_MARGIN,
+        minY: -GameRuntime.WORLD_HEIGHT / 2 + GameRuntime.PLAYER_MARGIN,
+        maxY: GameRuntime.WORLD_HEIGHT / 2 - GameRuntime.PLAYER_MARGIN
+      }
+    );
+    player.setPosition(next.x, next.y);
+    this.followPlayer(next.x, next.y);
+    return next;
+  }
+
+  private sendSkillEvent(skillId: string): void {
+    const player = this.localPlayer;
+    if (!player) return;
+    const position = player.node.position;
+    // 服务端只信任它保存的朝向。技能前先发送当前朝向，确保快速转向后立即撕咬不会按旧朝向判定。
+    this.realtime.sendInput({ clientTick: ++this.networkClientTick, moveX: 0, moveY: 0, rotation: player.facingAngle });
+    this.realtime.sendSkill({ skillId: skillId as SkillId, clientTick: ++this.networkClientTick, x: position.x, y: position.y, rotation: player.facingAngle });
+  }
+
+  private startFishAction(state: 'bite' | 'dashBite' | 'whaleSwallow' | 'deathRoll' | 'inkSplash' | 'orcaCharge' | 'hurt', duration: number): void {
+    this.fishActionState = state;
+    this.fishActionElapsed = 0;
+    this.fishActionDuration = duration;
+    const resources = this.requireAnimationsResManager().currentResources;
+    const frames = state === 'hurt' ? resources.hurtFrames : resources.attackFrames;
+    if (this.localPlayer && frames.length > 0) this.localPlayer.setFrame(frames[0]);
+  }
+
+  private updateFishAction(deltaTime: number): void {
+    if (!this.localPlayer || this.fishActionState === 'swim') return;
+    const resources = this.requireAnimationsResManager().currentResources;
+    this.fishActionElapsed += deltaTime;
+    const progress = Math.min(1, this.fishActionElapsed / this.fishActionDuration);
+    const frames = this.fishActionState === 'hurt' ? resources.hurtFrames : resources.attackFrames;
+    const index = Math.min(frames.length - 1, Math.floor(progress * frames.length));
+    if (index >= 0) this.localPlayer.setFrame(frames[index] ?? resources.swimFrames[this.swimFrameIndex]);
+    if (progress >= 1) {
+      this.fishActionState = 'swim';
+      this.fishActionElapsed = 0;
+      this.fishActionDuration = 0;
+      this.localPlayer.setFrame(resources.swimFrames[this.swimFrameIndex] ?? null);
+    }
+  }
+
+  private createBiteEffect(x: number, y: number, angle: number, radius: number, color: Color, duration: number): void {
+    this.combatEffects?.playBite(x, y, angle, radius, color, duration);
+  }
+
+  private createDashEffect(x: number, y: number, angle: number): void {
+    this.combatEffects?.playDash(x, y, angle);
+  }
+
+  /** 在固定释放点生成 16 路泼洒墨团：喷洒 0.5 秒，停顿 0.5 秒后快速扩散。 */
+  private createInkSplashEffect(x: number, y: number, radius: number, rayCount: number, rayLength: number, color: Color, sprayDuration: number, expansionDelay: number, expansionDuration: number): void {
+    this.combatEffects?.playInkSplash(x, y, radius, rayCount, rayLength, color, sprayDuration, expansionDelay, expansionDuration);
+    return;
+    const node = new Node('InkSplashEffect');
+    node.layer = this.rootNode.layer;
+    const transform = node.addComponent(UITransform);
+    transform.setContentSize(rayLength * 2 + 40, rayLength * 2 + 40);
+    const graphics = node.addComponent(Graphics);
+    graphics.fillColor = color;
+    const count = Math.max(1, Math.floor(rayCount));
+    // 使用不规则墨团与散落墨滴组成泼洒路径，避免长方形柱状表现。
+    const drawBlob = (cx: number, cy: number, blobRadius: number, seed: number): void => {
+      const points = 9;
+      for (let point = 0; point < points; point += 1) {
+        const angle = point * Math.PI * 2 / points;
+        const wobble = 0.76 + ((seed * 13 + point * 7) % 11) / 22;
+        const px = cx + Math.cos(angle) * blobRadius * wobble;
+        const py = cy + Math.sin(angle) * blobRadius * wobble;
+        if (point === 0) graphics.moveTo(px, py); else graphics.lineTo(px, py);
+      }
+      graphics.close();
+      graphics.fill();
+    };
+    for (let index = 0; index < count; index += 1) {
+      const angle = index * Math.PI * 2 / count;
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      const sideX = -dy;
+      const sideY = dx;
+      const segmentCount = 6;
+      for (let segment = 0; segment < segmentCount; segment += 1) {
+        const progress = (segment + 1) / segmentCount;
+        const distance = rayLength * (0.12 + progress * 0.84);
+        const wobble = (((index + 3) * (segment + 5)) % 9 - 4) * rayLength * 0.006;
+        const cx = dx * distance + sideX * wobble;
+        const cy = dy * distance + sideY * wobble;
+        const blobRadius = Math.max(7, rayLength * (0.047 - progress * 0.026));
+        drawBlob(cx, cy, blobRadius, index * 17 + segment);
+        if (segment > 0 && segment < segmentCount - 1) {
+          const dropSide = segment % 2 === 0 ? 1 : -1;
+          const dropDistance = distance + rayLength * 0.025;
+          graphics.circle(
+            dx * dropDistance + sideX * dropSide * blobRadius * 2.1,
+            dy * dropDistance + sideY * dropSide * blobRadius * 2.1,
+            Math.max(4, blobRadius * 0.32)
+          );
+          graphics.fill();
+        }
+      }
+    }
+    drawBlob(0, 0, Math.max(28, radius * 0.08), 97);
+    for (let drop = 0; drop < 12; drop += 1) {
+      const dropAngle = drop * Math.PI * 2 / 12 + 0.12;
+      const dropDistance = radius * (0.14 + (drop % 4) * 0.035);
+      graphics.circle(Math.cos(dropAngle) * dropDistance, Math.sin(dropAngle) * dropDistance, Math.max(5, radius * (0.012 + (drop % 3) * 0.004)));
+      graphics.fill();
+    }
+    this.rootNode.getChildByName('WorldRoot')?.addChild(node);
+    node.setPosition(x, y, 0);
+    node.setScale(0.05, 0.05, 1);
+    tween(node)
+      .to(Math.max(0.05, sprayDuration), { scale: new Vec3(1, 1, 1) })
+      .delay(Math.max(0, expansionDelay))
+      .to(Math.max(0.05, expansionDuration), { scale: new Vec3(1.32, 1.32, 1) })
+      .call(() => node.destroy())
+      .start();
+  }
+
+  private bindActionButton(node: Node, action: () => void): void {
+    node.on(Node.EventType.TOUCH_START, () => node.setScale(0.92, 0.92, 1));
+    node.on(Node.EventType.TOUCH_END, () => { node.setScale(1, 1, 1); action(); });
+    node.on(Node.EventType.TOUCH_CANCEL, () => node.setScale(1, 1, 1));
+  }
+
+  private advanceSwimAnimation(deltaTime: number, moving: boolean): void {
+    const resources = this.requireAnimationsResManager().currentResources;
+    if (!this.localPlayer || resources.swimFrames.length === 0 || this.fishActionState !== 'swim') return;
+    this.animationElapsed += deltaTime;
+    const frameDuration = moving ? Math.min(0.11, resources.config.swimFrameDurationSeconds) : resources.config.swimFrameDurationSeconds;
+    while (this.animationElapsed >= frameDuration) {
+      this.animationElapsed -= frameDuration;
+      this.swimFrameIndex = (this.swimFrameIndex + 1) % resources.swimFrames.length;
+      this.localPlayer.setFrame(resources.swimFrames[this.swimFrameIndex]);
+    }
+  }
+
+  private followPlayer(playerX: number, playerY: number): void {
+    if (!this.cameraNode || !this.hudRoot) return;
+    this.sceneManager.follow(this.cameraNode, this.hudRoot, playerX, playerY);
+    // MainCamera 同时承担 Canvas 渲染；HUD 与相机是 Canvas 下不同分支，
+    // 使用相同的局部 XY 即可保持屏幕固定，不能混入 Canvas 的半屏锚点偏移。
+  }
+
+  private loadImage(path: string): Promise<ImageAsset> {
+    return this.resourceLoader.loadImage(path);
+  }
+
+  private loadJson(path: string): Promise<unknown> {
+    return this.resourceLoader.loadJson(path);
+  }
+
+}
